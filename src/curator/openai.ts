@@ -77,6 +77,7 @@ export async function compileIntent({ provider = "openai", apiKey, model, baseUr
       "background_context is optional private user context. Use it only when relevant; current_intent always overrides it. Never quote it, reveal it, or turn it into feed content.",
       "Never infer a content language from the UI language, market context, profile, or query terms. Set languages to [] unless the user's current intent explicitly asks for one or more content languages.",
       "Set selection_mode to broad_personal when the request is for general updates, posts, or activity from followed/familiar people without a topic constraint. For broad_personal, keep include/tone/content_forms broad, prefer Home sources, and normally generate no discovery queries. Use topical for topic-led requests and broad_discovery for unconstrained discovery.",
+      "A broad_personal program is a continuously scrollable social timeline, not a search result. Give it a familiarity_target of at least 85 and max_per_author of 3-5 so a small set of active followed people can still fill the feed.",
       "Set origin_scope to people only when the user explicitly asks for real people, individual voices, friends, followed people, or personal experiences. broad_personal always uses people. Set publishers only for an explicit publisher or editorial-source request; otherwise use any.",
       "Set required_sources only when the user explicitly asks for content from a named source or platform. Map Threads to threads, Yle to yle, and Hacker News or HN to hackernews. Otherwise always use []. A required source is a hard source constraint, not a topic.",
       "Do not ask for clarification merely because a request is broad. Compile broad but usable requests such as general technology, good energy, or thoughtful posts directly. Clarify only an unresolved reference, a material contradiction, or a request with no usable selection signal.",
@@ -88,11 +89,34 @@ export async function compileIntent({ provider = "openai", apiKey, model, baseUr
     if (parsedResult?.program) {
       parsedResult.program.languages = explicitIntentLanguages(intent, parsedResult.program.languages);
       if (parsedResult.program.discovery) parsedResult.program.discovery.mastodon_tags = normalizeMastodonTags(parsedResult.program.discovery.mastodon_tags);
+      parsedResult.program = normalizeProgramForFeed(parsedResult.program, intent);
     }
     validateCompiledIntent(parsedResult);
     return parsedResult;
   });
   return { clarificationNeeded: parsed.clarification_needed, clarificationQuestion: parsed.clarification_question, program: parsed.program };
+}
+
+export function normalizeProgramForFeed(program, intent = program?.intent || "") {
+  if (!program || (program.selection_mode !== "broad_personal" && !isExplicitBroadPersonalIntent(intent))) return program;
+  return {
+    ...program,
+    selection_mode: "broad_personal",
+    origin_scope: "people",
+    familiarity_target: Math.max(85, Number(program.familiarity_target) || 0),
+    diversity: {
+      ...program.diversity,
+      max_per_author: Math.max(4, Number(program.diversity?.max_per_author) || 0)
+    },
+    discovery: { bluesky_queries: [], reddit_queries: [], mastodon_tags: [] }
+  };
+}
+
+export function isExplicitBroadPersonalIntent(intent = "") {
+  const text = String(intent).toLocaleLowerCase().replace(/\s+/g, " ").trim();
+  const people = /(?:friends?|people i follow|people i'm following|followed people|my people|kaver(?:i|eiden|eitani|it)|ystäv(?:ä|ien|iäni)|seuraam(?:ani|ieni)|ihmisteni|tuttujeni)/u;
+  const updates = /(?:updates?|posts?|activity|what(?:'s| is) new|kuulumis(?:et|ia)|päivity(?:kset|ksiä)|julkaisu(?:t|ja)|mitä kuuluu)/u;
+  return people.test(text) && updates.test(text);
 }
 
 export async function evaluateCandidates({ provider = "openai", apiKey, model, baseUrl, program, candidates, locale = "en" }) {

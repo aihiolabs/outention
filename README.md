@@ -109,6 +109,8 @@ Set these in the local configuration file, or save them persistently from Settin
 MODEL_PROVIDER=openrouter
 MODEL_API_KEY=your_key_here
 MODEL_NAME=openai/gpt-5.6-luna
+# Optional: a cheaper model at the same provider for bounded content evaluation
+MODEL_EVALUATOR_NAME=google/gemini-3.6-flash
 ```
 
 Supported provider identifiers:
@@ -124,6 +126,8 @@ Supported provider identifiers:
 Model availability changes. Use a current model that supports structured output or tool use in your provider account.
 
 OpenRouter is the easiest default and the model field also offers `google/gemini-3.6-flash` and `anthropic/claude-haiku-4.5`. Direct provider keys remain supported. For a fully local curation path, see [Local models](docs/LOCAL-MODELS.md).
+
+`MODEL_NAME` translates the user's intention into the ranking program. `MODEL_EVALUATOR_NAME` can point to a cheaper model under the same provider account; it sees only the bounded candidate tranche that deterministic retrieval and triage could not eliminate. Broad personal timelines skip content-model evaluation entirely.
 
 ## Development
 

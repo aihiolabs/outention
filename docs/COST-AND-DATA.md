@@ -7,9 +7,9 @@ Outention is intentionally a bounded retrieval-and-ranking pipeline, not a chatb
 One fresh intention makes one compiler call plus one or more bounded evaluator calls:
 
 1. The compiler turns the intention and optional profile context into a small `RankingProgram` and source-native search terms.
-2. The evaluator assigns semantic and tone signals to at most 36 preselected candidates (24 with a local model), in batches of 24 or 12.
+2. The evaluator assigns semantic and tone signals to at most 36 preselected candidates (24 with a local model), in batches of 24 or 12. It may be a separately configured cheaper model under the same provider account.
 
-Before the evaluator runs, Outention has already deduplicated results, applied explicit language constraints, balanced personal and discovery layers, capped the pool at 60, and used cheap local signals to prioritize the smaller semantic tranche. Each candidate contributes at most 900 characters of post text. Author handles and platform-stable post IDs are not sent to the model; candidates use temporary IDs such as `c1` during evaluation.
+Before the evaluator runs, Outention has already deduplicated results, applied explicit language constraints, balanced personal and discovery layers, capped the pool at 100, and used cheap local signals to prioritize the smaller semantic tranche. Each candidate contributes at most 900 characters of post text. Author handles and platform-stable post IDs are not sent to the model; candidates use temporary IDs such as `c1` during evaluation.
 
 The current session reuses a matching semantic evaluation for 30 minutes. The cache is capped at 500 entries and stores the compact evaluation under hashes of the program and candidate representation, not a second raw-content archive.
 
@@ -31,6 +31,8 @@ When the ranked buffer is exhausted, **Expand search** starts a new bounded retr
 ## Provider choice
 
 The default examples use relatively small cloud models through OpenRouter. Outention asks OpenRouter to route only to providers that support every requested structured-output parameter and sets `data_collection: deny`. Direct OpenAI, Anthropic and Gemini adapters are also available. Local mode uses an OpenAI-compatible endpoint such as Ollama, LM Studio or vLLM and can keep both model calls on the same machine.
+
+`MODEL_NAME` runs the compact intention compiler. Optional `MODEL_EVALUATOR_NAME` runs only bounded content evaluation and can be a cheaper small model available through the same configured provider and API key. Broad personal timelines do not invoke it at all.
 
 BYOK determines which account pays for model use. It does not change the selected provider's data-processing terms. Model availability and pricing change, so Outention does not hard-code a currency estimate.
 

@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { compileIntent, evaluateCandidates, explicitIntentLanguages, filterCandidatesByLanguage, listLocalModels, normalizeLanguageCodes, normalizeMastodonTags, probeModelConnection } from "../src/curator/openai.js";
+import { compileIntent, evaluateCandidates, explicitIntentLanguages, filterCandidatesByLanguage, isExplicitBroadPersonalIntent, listLocalModels, normalizeLanguageCodes, normalizeMastodonTags, normalizeProgramForFeed, probeModelConnection } from "../src/curator/openai.js";
 
 const program = {
   intent: "wingfoil discoveries", selection_mode: "topical", origin_scope: "any", include: ["wingfoil"], exclude: [], tone: ["practical"], social_scope: ["home", "discovery"], content_forms: ["posts"],
@@ -55,6 +55,31 @@ test("normalizes model-produced language names to ISO codes", () => {
 
 test("normalizes model-produced Mastodon tags", () => {
   assert.deepEqual(normalizeMastodonTags(["#ukraina", "ukraine", "##ukraina", ""]), ["ukraina", "ukraine"]);
+});
+
+test("normalizes a broad personal intent into a feed-sized social timeline", () => {
+  const normalized = normalizeProgramForFeed({
+    ...program,
+    selection_mode: "broad_personal",
+    origin_scope: "any",
+    familiarity_target: 20,
+    diversity: { max_per_author: 1 },
+    discovery: { bluesky_queries: ["friends"], reddit_queries: ["friends"], mastodon_tags: ["friends"] }
+  });
+  assert.equal(normalized.origin_scope, "people");
+  assert.equal(normalized.familiarity_target, 85);
+  assert.equal(normalized.diversity.max_per_author, 4);
+  assert.deepEqual(normalized.discovery, { bluesky_queries: [], reddit_queries: [], mastodon_tags: [] });
+});
+
+test("recognizes explicit followed-people updates even when a model misclassifies them", () => {
+  assert.equal(isExplicitBroadPersonalIntent("Recent personal updates from people I follow"), true);
+  assert.equal(isExplicitBroadPersonalIntent("Siis kavereiden päivityksiä"), true);
+  assert.equal(isExplicitBroadPersonalIntent("Ihmisteni kuulumiset"), true);
+  assert.equal(isExplicitBroadPersonalIntent("Finnish politics"), false);
+  const normalized = normalizeProgramForFeed({ ...program, selection_mode: "broad_discovery" }, "Recent personal updates from people I follow");
+  assert.equal(normalized.selection_mode, "broad_personal");
+  assert.equal(normalized.familiarity_target, 85);
 });
 
 test("evaluates only supplied IDs without synthetic content", async t => {

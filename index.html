@@ -352,6 +352,9 @@
             <label for="model-name"><strong>Malli</strong><span id="model-hint"></span></label>
             <input id="model-name" name="model" type="text" maxlength="150" spellcheck="false" list="model-presets" required />
             <datalist id="model-presets"></datalist>
+            <label for="model-evaluator"><strong>Halpa sisältöarvioija</strong><span>Valinnainen</span></label>
+            <input id="model-evaluator" name="evaluatorModel" type="text" maxlength="150" spellcheck="false" list="model-presets" placeholder="Esim. google/gemini-3.6-flash" />
+            <small>Arvioi vain sipulirakenteen epäselvän ehdokasjoukon. Tyhjänä kuraattorimalli hoitaa myös tämän vaiheen.</small>
             <div id="model-base-url-field" hidden>
               <label for="model-base-url"><strong>Paikallinen API-osoite</strong><span>OpenAI-yhteensopiva</span></label>
               <input id="model-base-url" name="baseUrl" type="url" maxlength="300" value="http://127.0.0.1:11434/v1" spellcheck="false" />

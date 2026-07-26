@@ -20,7 +20,7 @@ The `RankingProgram` is the control plane between natural language and internal 
 
 ### Current implementation
 
-A fresh feed uses one structured compiler call and retrieves at most 100 interleaved candidates. Local constraints and deduplication run first, the familiarity pool is capped at 60, and a deterministic priority layer uses source-native order, freshness, feed layer, retrieval context and cheap term matches to choose at most 36 candidates. Local models receive at most 24. Each candidate sends at most 900 text characters under a temporary ID.
+A fresh feed uses one structured compiler call and retrieves at most 160 interleaved candidates. Local constraints and deduplication run first, the familiarity pool is capped at 100, and a deterministic priority layer uses source-native order, freshness, feed layer, retrieval context and cheap term matches to choose at most 36 candidates. Local models receive at most 24. A broad personal timeline keeps up to 60 source-native personal candidates and skips content-model evaluation. Each evaluated candidate sends at most 900 text characters under a temporary ID.
 
 Semantic evaluation runs in batches of 24 for cloud providers and 12 for local providers. Matching candidate/program evaluations are cached in the current local session for 30 minutes, with a 500-entry cap and no raw post text stored in the cache key or value. Final ranking, diversity, buffered pagination and weight changes remain local.
 
@@ -32,7 +32,7 @@ Measure recall against full-pool evaluation and add adaptive expansion only when
 
 Recommended defaults:
 
-- retrieve at most 100 normalized candidates;
+- retrieve at most 160 normalized candidates and cap the balanced working pool at 100;
 - evaluate 24–36 candidates in the first semantic tranche;
 - require enough candidates above the relevance floor for one page plus lookahead;
 - expand toward 60 only when coverage is insufficient;
@@ -65,7 +65,7 @@ A larger model is not a normal fifth layer. If later introduced, it should recei
 
 ### Decisions for the public alpha
 
-- Keep one selected small structured-output model for compilation and evaluation.
+- Use the selected curator model for program compilation and allow an optional cheaper evaluator model under the same provider credential.
 - Keep final ranking deterministic and provider-independent.
 - Expose aggregate pipeline counts only in the local API; collect no Outention telemetry.
 - Treat source-native metadata as useful evidence, not universal truth.

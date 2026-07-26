@@ -31,10 +31,10 @@ test("does not fill a topical feed with semantically unrelated candidates", () =
 });
 
 test("requires meaningful relevance for topical feeds", () => {
-  const candidates = [candidate("weak", "discovery", "a"), candidate("borderline", "discovery", "b"), candidate("useful", "discovery", "c")];
-  const evaluated = [{ ...signal("weak"), semantic_score: 35 }, { ...signal("borderline"), semantic_score: 45 }, { ...signal("useful"), semantic_score: 60 }];
+  const candidates = [candidate("weak", "discovery", "a"), candidate("borderline", "discovery", "b"), candidate("useful", "discovery", "c"), candidate("good", "discovery", "d")];
+  const evaluated = [{ ...signal("weak"), semantic_score: 35 }, { ...signal("borderline"), semantic_score: 45 }, { ...signal("useful"), semantic_score: 50 }, { ...signal("good"), semantic_score: 60 }];
   const ranked = rankEvaluatedCandidates({ candidates, evaluated, program: baseProgram });
-  assert.deepEqual(ranked.map(item => item.id), ["useful"]);
+  assert.deepEqual(ranked.map(item => item.id), ["good", "useful"]);
 });
 
 test("rejects a high-scoring candidate that misses the request core", () => {

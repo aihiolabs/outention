@@ -56,13 +56,15 @@ try {
   assert(status.customConnectors.sources.some(source => source.id === "fixture"), "local connector was not loaded");
   const saved = await requestJson("/api/account/model-key", {
     method: "POST", cookie: status.cookie,
-    body: { provider: "local", model: "smoke-model", baseUrl: `http://127.0.0.1:${modelPort}/v1`, apiKey: "", persist: true }
+    body: { provider: "local", model: "smoke-model", evaluatorModel: "smoke-evaluator", baseUrl: `http://127.0.0.1:${modelPort}/v1`, apiKey: "", persist: true }
   });
   assert(saved.verified, "model was saved without a successful structured-output probe");
   const feed = await requestJson("/api/feed", { method: "POST", cookie: status.cookie, body: { intent: "Updates from my friends", profileContext: "" } });
-  assert(feed.items.length >= 8, `first feed was unexpectedly sparse: ${feed.items.length}`);
+  assert(feed.items.length >= 20, `first feed was unexpectedly sparse: ${feed.items.length}`);
+  assert(feed.pagination.hasMore, "personal feed did not retain a scroll buffer");
+  assert(feed.pipeline.evaluatorModel === "smoke-evaluator", "separate evaluator model was not wired into the pipeline");
   assert(feed.program.languages.length === 0, "UI language leaked into content-language filtering");
-  assert(feed.pipeline.triaged <= 40 && feed.pipeline.modelEvaluated <= 40, "onion prefilter did not bound model input");
+  assert(feed.pipeline.triaged <= 60 && feed.pipeline.modelEvaluated === 0, "personal feed should stay bounded without content-model evaluation");
   console.log(`first-feed-smoke=ok items=${feed.items.length} triaged=${feed.pipeline.triaged} modelCalls=${feed.pipeline.modelCalls}`);
 } finally {
   child.kill("SIGTERM");
@@ -80,7 +82,7 @@ function compiledProgram(intent) {
 }
 
 function connectorSource() {
-  return `export const connector={apiVersion:1,id:"fixture",name:"Fixture friends",capabilities:["personal-feed"],async fetchCandidates(){return Array.from({length:12},(_,i)=>({id:"fixture:"+i,sourceType:"fixture",sourceName:"Fixture friends",feedLayer:"personal",canonicalUrl:"https://example.com/posts/"+i,author:{id:"friend-"+i,name:"Friend "+i,handle:"@friend"+i,avatar:null},text:"A real personal update from friend "+i,language:"en",publishedAt:new Date(Date.now()-i*60000).toISOString(),indexedAt:new Date().toISOString(),engagement:{likes:i,replies:0,reposts:0},socialContext:"Followed person",reply:null,labels:[],media:[]}))}};`;
+  return `export const connector={apiVersion:1,id:"fixture",name:"Fixture friends",capabilities:["personal-feed"],async fetchCandidates(){return Array.from({length:36},(_,i)=>({id:"fixture:"+i,sourceType:"fixture",sourceName:"Fixture friends",feedLayer:"personal",canonicalUrl:"https://example.com/posts/"+i,author:{id:"friend-"+(i%9),name:"Friend "+(i%9),handle:"@friend"+(i%9),avatar:null},text:"A real personal update from friend "+(i%9),language:"en",publishedAt:new Date(Date.now()-i*60000).toISOString(),indexedAt:new Date().toISOString(),engagement:{likes:i,replies:0,reposts:0},socialContext:"Followed person",reply:null,labels:[],media:[]}))}};`;
 }
 async function waitForHealth() { for (let attempt = 0; attempt < 50; attempt++) { try { if ((await fetch(`${origin}/api/health`)).ok) return; } catch {} await new Promise(resolve => setTimeout(resolve, 100)); } throw new Error(`server did not start: ${stderr.slice(0, 800)}`); }
 async function getJson(path) { const response = await fetch(`${origin}${path}`, { headers: { "x-outention-locale": "en" } }); const data = await response.json(); if (!response.ok) throw new Error(data.error || `${path} failed`); return { ...data, cookie: response.headers.getSetCookie().map(value => value.split(";", 1)[0]).join("; ") }; }

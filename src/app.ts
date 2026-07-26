@@ -48,7 +48,7 @@ const MODEL_PRESETS = Object.freeze({
 const state = {
   status: null, program: null, items: [], runId: null, lastIntent: "",
   pagination: null, history: [], activeHistoryId: null, savedFeeds: [], profileContext: "", locationContext: "", loading: false, loadingMore: false, localModels: [],
-  onboardingStep: 0, onboardingResumeStep: null
+  onboardingStep: 0, onboardingResumeStep: null, automaticContinuations: 0
 };
 
 const elements = {
@@ -85,6 +85,7 @@ const elements = {
   accountModeLabel: document.querySelector("#account-mode-label"), modelPersistOption: document.querySelector("#model-persist-option"),
   accountLogout: document.querySelector("#account-logout"), accountStatus: document.querySelector("#account-status"),
   modelKeyForm: document.querySelector("#model-key-form"), modelProvider: document.querySelector("#model-provider"), modelName: document.querySelector("#model-name"),
+  modelEvaluator: document.querySelector("#model-evaluator"),
   modelHint: document.querySelector("#model-hint"), modelApiKey: document.querySelector("#model-api-key"), modelPersist: document.querySelector("#model-persist"),
   modelBaseUrlField: document.querySelector("#model-base-url-field"), modelBaseUrl: document.querySelector("#model-base-url"),
   modelPersistTitle: document.querySelector("#model-persist-title"), modelPersistDetail: document.querySelector("#model-persist-detail"),
@@ -253,9 +254,10 @@ function renderAccount() {
   if (byok?.configured) {
     elements.modelProvider.value = byok.provider;
     elements.modelName.value = byok.model;
+    elements.modelEvaluator.value = byok.evaluatorModel || "";
     if (byok.baseUrl) elements.modelBaseUrl.value = byok.baseUrl;
     elements.modelPersist.checked = byok.persisted;
-    elements.modelKeyStatus.textContent = `${t("Käytössä", "Active")}: ${providerName(byok.provider)} · ${byok.model} · ${byok.persisted ? personal ? ".env.local" : t("salattu tallennus", "encrypted storage") : t("vain tämä istunto", "this session only")}`;
+    elements.modelKeyStatus.textContent = `${t("Käytössä", "Active")}: ${providerName(byok.provider)} · ${byok.model}${byok.evaluatorModel ? ` · ${t("arvioija", "evaluator")} ${byok.evaluatorModel}` : ""} · ${byok.persisted ? personal ? ".env.local" : t("salattu tallennus", "encrypted storage") : t("vain tämä istunto", "this session only")}`;
   } else {
     const curator = state.status?.curator;
     if (personal && curator?.configured) {
@@ -430,10 +432,12 @@ async function toggleSimpleSource(source) {
   } catch (error) { elements.libraryStatus.textContent = error.message; }
 }
 
-async function requestFeed(intent, { scroll = true, kind = "intent", label = intent, append = false, excludeIds = [] } = {}) {
+async function requestFeed(intent, { scroll = true, kind = "intent", label = intent, append = false, excludeIds = [], controlsOverride, previousProgramOverride } = {}) {
   if (state.loading) return false;
   const hadFeed = state.items.length > 0;
-  const controls = controlsPayload();
+  const freshIntent = kind === "intent" || kind === "saved";
+  const controls = controlsOverride ?? (freshIntent ? undefined : controlsPayload());
+  const previousProgram = previousProgramOverride ?? (freshIntent ? null : state.program);
   setLoading(true); showNotice("", "");
   const slowNotice = window.setTimeout(() => {
     if (!state.loading) return;
@@ -448,7 +452,7 @@ async function requestFeed(intent, { scroll = true, kind = "intent", label = int
   try {
     const data = await api("/api/feed", { method: "POST", body: JSON.stringify({
       intent,
-      previousProgram: kind === "intent" ? null : state.program,
+      previousProgram,
       profileContext: state.profileContext,
       controls, excludeIds
     }) });
@@ -469,12 +473,21 @@ async function requestFeed(intent, { scroll = true, kind = "intent", label = int
 }
 
 function applyFeedResult(data, { intent, kind, label, append = false }) {
+  if (kind !== "continuation") state.automaticContinuations = 0;
   state.lastIntent = intent; state.program = data.program;
   state.items = append ? uniqueItems([...state.items, ...(data.items || [])]) : data.items || [];
   state.runId = data.runId || null; state.pagination = data.pagination || null;
   renderProgram(state.program); renderFeed(state.items);
   elements.feedShell.hidden = false; document.body.classList.add("has-feed");
-  pushHistory({ label, kind, intent, program: state.program, items: state.items, runId: state.runId, pagination: state.pagination });
+  if (kind === "continuation" && state.activeHistoryId) {
+    const active = state.history.find(entry => entry.id === state.activeHistoryId);
+    if (active) {
+      active.intent = intent; active.program = clone(state.program); active.items = clone(state.items);
+      active.runId = state.runId; active.pagination = clone(state.pagination); renderHistory();
+    }
+  } else {
+    pushHistory({ label, kind, intent, program: state.program, items: state.items, runId: state.runId, pagination: state.pagination });
+  }
   renderCurrentFeed(); persistWorkspace();
 }
 
@@ -655,10 +668,12 @@ function renderContinuation() {
   elements.loadMore.querySelector(".load-more-label").textContent = buffered ? t("Lataa lisää", "Load more") : state.runId ? t("Laajenna hakua", "Expand search") : t("Hae lisää", "Find more");
   elements.loadMore.querySelector("[aria-hidden]").textContent = buffered ? "↓" : "✦";
   elements.continuationNote.textContent = !state.runId
-    ? t("Palautettu feedi tarvitsee uuden rajatun haun ennen jatkamista. Jo näytetyt julkaisut ohitetaan.", "A restored feed needs a new scoped search to continue. Posts already shown will be skipped.")
+    ? t("Jatka vierittämistä — palautettu feedi päivitetään automaattisesti ja jo nähdyt julkaisut ohitetaan.", "Keep scrolling — the restored feed refreshes automatically and skips posts already shown.")
     : buffered
     ? t("Seuraava erä on jo järjestetty — ei uutta mallikutsua.", "The next batch is already ranked — no new model call.")
-    : t("Nykyinen puskuri loppui. Uusi rajattu haku käyttää kuraattoria vain hakusuunnan tarkentamiseen.", "The current buffer is empty. A scoped search uses the curator only to refine retrieval.");
+    : state.automaticContinuations < 2
+    ? t("Jatka vierittämistä — seuraava rajattu erä haetaan automaattisesti.", "Keep scrolling — the next bounded batch is fetched automatically.")
+    : t("Automaattiset jatkohaut on käytetty. Voit hakea vielä yhden erän käsin.", "Automatic continuations are complete. You can still fetch another batch manually.");
   elements.loadMore.disabled = state.loadingMore || state.loading;
 }
 
@@ -754,9 +769,21 @@ function controlsPayload() {
   };
 }
 
+function controlsFromProgram(program) {
+  return {
+    weights: {
+      relevance: program.weights?.relevance,
+      freshness: program.weights?.freshness,
+      engagement: program.weights?.engagement
+    },
+    familiarity_target: program.familiarity_target,
+    max_per_author: program.diversity?.max_per_author
+  };
+}
+
 function readControls() {
-  const data = new FormData(elements.algorithmControls); const values = {};
-  for (const key of Object.keys(DEFAULT_CONTROLS)) values[key] = Number(data.get(key));
+  const values = {};
+  for (const key of Object.keys(DEFAULT_CONTROLS)) values[key] = Number(elements.algorithmControls.elements[key]?.value);
   return values;
 }
 
@@ -800,7 +827,7 @@ function setLoading(value) {
 async function resetSession() {
   if (state.loading) return;
   await api("/api/feed", { method: "DELETE" }).catch(() => null);
-  state.program = null; state.items = []; state.runId = null; state.lastIntent = ""; state.pagination = null; state.history = []; state.activeHistoryId = null;
+  state.program = null; state.items = []; state.runId = null; state.lastIntent = ""; state.pagination = null; state.history = []; state.activeHistoryId = null; state.automaticContinuations = 0;
   elements.feedShell.hidden = true; document.body.classList.remove("has-feed"); elements.intentInput.value = ""; elements.refineInput.value = "";
   setControls(DEFAULT_CONTROLS); renderHistory(); showNotice(t("Istunnon feedi ja korjaushistoria nollattiin.", "The session feed and change history were cleared."), "question");
   renderCurrentFeed(); persistWorkspace();
@@ -897,7 +924,9 @@ function renderSavedFeeds() {
         familiarity_target: feed.program.familiarity_target, engagement: feed.program.weights?.engagement,
         max_per_author: feed.program.diversity?.max_per_author
       });
-      elements.intentInput.value = feed.intent; requestFeed(feed.intent, { kind: "intent", label: feed.name });
+      elements.intentInput.value = feed.intent; requestFeed(feed.intent, {
+        kind: "saved", label: feed.name, previousProgramOverride: feed.program, controlsOverride: controlsFromProgram(feed.program)
+      });
     });
     const actions = document.createElement("span"); actions.className = "saved-feed-row-actions";
     const exportButton = document.createElement("button"); exportButton.type = "button"; exportButton.className = "saved-feed-export"; exportButton.textContent = t("Vie", "Export");
@@ -1157,11 +1186,11 @@ elements.modelKeyForm.addEventListener("submit", async event => {
   elements.modelKeyForm.querySelectorAll("button,input,select").forEach(control => { control.disabled = true; });
   try {
     const result = await api("/api/account/model-key", { method: "POST", body: JSON.stringify({
-      provider: elements.modelProvider.value, model: elements.modelName.value, apiKey: elements.modelApiKey.value,
+      provider: elements.modelProvider.value, model: elements.modelName.value, evaluatorModel: elements.modelEvaluator.value, apiKey: elements.modelApiKey.value,
       baseUrl: elements.modelBaseUrl.value, persist: elements.modelPersist.checked
     }) });
     state.status.accountFeatures.byok = result;
-    state.status.curator = { configured: true, provider: result.provider, model: result.model, keySource: "user", verified: result.verified };
+    state.status.curator = { configured: true, provider: result.provider, model: result.model, evaluatorModel: result.evaluatorModel, keySource: "user", verified: result.verified };
     elements.modelApiKey.value = "";
     elements.accountDialog.close(); renderStatus();
     showNotice(t("Malliyhteys testattiin ja tallennettiin.", "Model connection tested and saved."), "question");
@@ -1263,7 +1292,12 @@ elements.locationewsForm.addEventListener("submit", async event => {
 });
 
 const continuationObserver = new IntersectionObserver(entries => {
-  if (entries.some(entry => entry.isIntersecting) && state.runId && state.pagination?.hasMore && !state.loadingMore && !state.loading) loadMore();
+  if (!entries.some(entry => entry.isIntersecting) || !state.items.length || state.loadingMore || state.loading) return;
+  if (state.pagination?.hasMore) return loadMore();
+  if (state.automaticContinuations < 2) {
+    state.automaticContinuations += 1;
+    loadMore();
+  }
 }, { rootMargin: "500px 0px" });
 continuationObserver.observe(elements.continuationSentinel);
 

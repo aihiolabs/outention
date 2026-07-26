@@ -19,7 +19,7 @@ import { compileIntent, evaluateCandidates, filterCandidatesByLanguage, listLoca
 import { filterCandidatesByOriginScope, filterCandidatesByRequiredSources, filterCandidatesBySelectionMode, rankEvaluatedCandidates, selectCandidatePool, summarizeRankingQuality, triageCandidates } from "./src/curator/ranker.js";
 import type { Candidate, EvaluationSignal, RankingProgram } from "./src/types.js";
 
-type ModelCredential = { provider: string; apiKey: string; model: string; baseUrl?: string; verified?: boolean; verifiedAt?: string };
+type ModelCredential = { provider: string; apiKey: string; model: string; evaluatorModel?: string; baseUrl?: string; verified?: boolean; verifiedAt?: string };
 type FeedRun = { id?: string; candidates: Candidate[]; evaluated: EvaluationSignal[]; program: RankingProgram; pipeline?: Record<string, unknown> };
 
 const projectRoot = process.env.OUTENTION_PACKAGE_ROOT || process.cwd();
@@ -170,12 +170,17 @@ async function handleApi(request, response, url, session, sessionId) {
     const submittedApiKey = String(body.apiKey || "").trim();
     const apiKey = submittedApiKey || (existingCredential?.provider === provider ? existingCredential.apiKey : "");
     const model = validateModelName(body.model);
+    const evaluatorModel = String(body.evaluatorModel || "").trim();
+    if (evaluatorModel) validateModelName(evaluatorModel);
     validateModelApiKey(provider, apiKey);
     const baseUrl = provider === "local" ? validateLocalModelUrl(body.baseUrl) : null;
     if (provider === "local" && !personalMode) throw httpError(400, "Paikallinen malli on käytettävissä vain Personal Modessa.");
     if (body.persist && !personalMode && !authStore?.connectionsEnabled) throw httpError(503, "Salattu avaintallennus ei ole käytössä.");
-    const candidateCredential: ModelCredential = { provider, apiKey, model, ...(baseUrl ? { baseUrl } : {}) };
+    const candidateCredential: ModelCredential = { provider, apiKey, model, ...(evaluatorModel ? { evaluatorModel } : {}), ...(baseUrl ? { baseUrl } : {}) };
     if (process.env.OUTENTION_SKIP_MODEL_PROBE !== "1") await probeModelConnection(candidateCredential);
+    if (process.env.OUTENTION_SKIP_MODEL_PROBE !== "1" && evaluatorModel && evaluatorModel !== model) {
+      await probeModelConnection({ ...candidateCredential, model: evaluatorModel });
+    }
     session.modelCredential = { ...candidateCredential, verified: true, verifiedAt: new Date().toISOString() };
     session.modelCredentialPersisted = Boolean(body.persist);
     if (personalMode && body.persist) {
@@ -534,11 +539,11 @@ async function handleApi(request, response, url, session, sessionId) {
 
     const batches: Candidate[][] = [];
     if (session.bluesky) {
-      try { batches.push(await fetchBlueskyTimeline(session.bluesky, { limit: 60 })); }
+      try { batches.push(await fetchBlueskyTimeline(session.bluesky, { limit: 100 })); }
       catch (error) {
         if (!isBlueskyAccessTokenError(error)) throw error;
         session.bluesky = await refreshBlueskySession(session.bluesky); await persistConnections(session);
-        batches.push(await fetchBlueskyTimeline(session.bluesky, { limit: 60 }));
+        batches.push(await fetchBlueskyTimeline(session.bluesky, { limit: 100 }));
       }
     }
     if (session.mastodon) {
@@ -600,7 +605,7 @@ async function handleApi(request, response, url, session, sessionId) {
       else console.error("Discovery-lähde", result.reason?.message || "tuntematon virhe");
     }
     const retrievedTotal = batches.reduce((sum, batch) => sum + batch.length, 0);
-    const retrieved = interleaveBatches(batches, 100);
+    const retrieved = interleaveBatches(batches, 160);
     const unique = uniqueCandidates(retrieved);
     const excludedIds = new Set((body.excludeIds || []).slice(0, 250).map(String));
     const unseen = unique.filter(item => !excludedIds.has(item.id));
@@ -608,9 +613,9 @@ async function handleApi(request, response, url, session, sessionId) {
     const selectionMatched = filterCandidatesBySelectionMode(languageMatched, program.selection_mode);
     const sourceMatched = filterCandidatesByRequiredSources(selectionMatched, program.required_sources);
     const originMatched = filterCandidatesByOriginScope(sourceMatched, program.origin_scope);
-    const pooled = selectCandidatePool(originMatched, program.familiarity_target, 60);
+    const pooled = selectCandidatePool(originMatched, program.familiarity_target, 100);
     const localModel = modelOptions.provider === "local";
-    const triageLimit = localModel ? 24 : program.selection_mode === "broad_personal" ? 40 : 36;
+    const triageLimit = program.selection_mode === "broad_personal" ? 60 : localModel ? 24 : 36;
     const candidates = triageCandidates(pooled, program, triageLimit);
     if (!candidates.length && program.selection_mode === "broad_personal") {
       throw httpError(503, "Henkilökohtainen Home-feedi ei vastannut. Tarkista Bluesky-, Mastodon- tai Reddit-yhteys.");
@@ -619,7 +624,8 @@ async function handleApi(request, response, url, session, sessionId) {
       throw httpError(503, "Pyydetystä lähteestä ei löytynyt sisältöä juuri nyt.");
     }
     if (!candidates.length) throw httpError(503, "Yksikään sisältölähde ei vastannut. Yhdistä lähde tai yritä hetken päästä uudelleen.");
-    const evaluation = await evaluateWithCache({ session, modelOptions, program, candidates, locale });
+    const evaluatorOptions = modelOptions.evaluatorModel ? { ...modelOptions, model: modelOptions.evaluatorModel } : modelOptions;
+    const evaluation = await evaluateWithCache({ session, modelOptions: evaluatorOptions, program, candidates, locale });
     const evaluated = evaluation.items;
     const run = storeRun(session, {
       candidates, evaluated, program,
@@ -639,6 +645,7 @@ async function handleApi(request, response, url, session, sessionId) {
         modelEvaluated: evaluation.modelEvaluated,
         evaluationBySource: summarizeEvaluationBySource(candidates, evaluated),
         modelCalls: 1 + evaluation.modelCalls,
+        evaluatorModel: evaluatorOptions.model,
         modelCandidateTextLimit: 900
       }
     });
@@ -890,6 +897,7 @@ function modelCredentialStatus(session) {
     persisted: sessionCredential ? Boolean(session.modelCredentialPersisted) : Boolean(personalMode && serverModelCredential),
     provider: credential?.provider || null,
     model: credential?.model || null,
+    evaluatorModel: credential?.evaluatorModel || null,
     baseUrl: credential?.provider === "local" ? credential.baseUrl : null,
     verified: Boolean(credential?.verified),
     verifiedAt: credential?.verifiedAt || null
@@ -902,6 +910,7 @@ async function persistPersonalModelCredential(credential) {
     MODEL_PROVIDER: credential.provider,
     MODEL_API_KEY: credential.apiKey,
     MODEL_NAME: credential.model,
+    MODEL_EVALUATOR_NAME: credential.evaluatorModel || "",
     MODEL_BASE_URL: credential.baseUrl || ""
   };
   await updateLocalConfig(updates);
@@ -928,7 +937,7 @@ async function updateLocalConfig(updates) {
 }
 
 async function clearPersonalModelCredential() {
-  await persistPersonalModelCredential({ provider: process.env.MODEL_PROVIDER || "openrouter", apiKey: "", model: process.env.MODEL_NAME || "openai/gpt-5.6-luna", baseUrl: "" });
+  await persistPersonalModelCredential({ provider: process.env.MODEL_PROVIDER || "openrouter", apiKey: "", model: process.env.MODEL_NAME || "openai/gpt-5.6-luna", evaluatorModel: "", baseUrl: "" });
   process.env.MODEL_API_KEY = ""; process.env.OPENAI_API_KEY = ""; process.env.MODEL_BASE_URL = ""; serverModelCredential = null;
 }
 
@@ -944,10 +953,12 @@ function readServerModelCredential() {
     local: ""
   };
   const model = String(process.env.MODEL_NAME || process.env.OPENAI_MODEL || defaults[provider] || "").trim();
+  const evaluatorModel = String(process.env.MODEL_EVALUATOR_NAME || "").trim();
   if (!modelProviders.has(provider)) throw new Error(`Unsupported MODEL_PROVIDER: ${provider}`);
   if (!isValidModelName(model)) throw new Error("MODEL_NAME is missing or invalid.");
+  if (evaluatorModel && !isValidModelName(evaluatorModel)) throw new Error("MODEL_EVALUATOR_NAME is invalid.");
   const baseUrl = provider === "local" ? validateLocalModelUrl(process.env.MODEL_BASE_URL || "http://127.0.0.1:11434/v1", false) : null;
-  return { provider, apiKey, model, ...(baseUrl ? { baseUrl } : {}), verified: false, verifiedAt: null };
+  return { provider, apiKey, model, ...(evaluatorModel ? { evaluatorModel } : {}), ...(baseUrl ? { baseUrl } : {}), verified: false, verifiedAt: null };
 }
 
 function validateModelApiKey(provider, value) {

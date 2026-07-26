@@ -112,7 +112,7 @@ export function summarizeRankingQuality({ candidates, evaluated, program }: { ca
 
 function relevanceFloor(relevanceWeight?: number): number {
   const weight = clamp(relevanceWeight, 0, 100, 45);
-  return weight <= 0 ? 0 : Math.min(75, Math.max(60, weight * .8));
+  return weight <= 0 ? 0 : Math.min(70, Math.max(50, weight * .75));
 }
 
 function wouldDominateSource(item: Candidate, counts: Map<string, number>, selectedCount: number): boolean {
