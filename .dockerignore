@@ -1,0 +1,12 @@
+.env
+.env.*
+!.env.example
+!.env.production.example
+.git
+node_modules
+.outention
+npm-debug.log
+.DS_Store
+tests
+deploy
+README.md

@@ -1,0 +1,456 @@
+<!doctype html>
+<html lang="fi">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta name="app-base" content="__BASE_PATH__" />
+    <meta name="description" content="Outention järjestää alkuperäiset sisällöt hetkellisen intentiosi mukaan." />
+    <meta name="theme-color" content="#194b38" />
+    <meta property="og:title" content="Outention — your attention, on purpose" />
+    <meta property="og:description" content="Kerro, mistä haluat kuulla. Outention rakentaa alkuperäisistä sisällöistä juuri sen feedin." />
+    <meta name="apple-mobile-web-app-capable" content="yes" />
+    <meta name="apple-mobile-web-app-status-bar-style" content="default" />
+    <meta name="apple-mobile-web-app-title" content="Outention" />
+    <title>Outention — sinun intentiosi, sinun huomiosi</title>
+    <link rel="icon" href="favicon.svg" type="image/svg+xml" />
+    <link rel="apple-touch-icon" href="apple-touch-icon.png" />
+    <link rel="manifest" href="__BASE_PATH__/manifest.webmanifest?v=0.1.3" />
+    <link rel="stylesheet" href="styles.css?v=0.1.3" />
+  </head>
+  <body>
+    <header class="site-header social-header">
+      <a class="brand" href="#top" aria-label="Outention etusivu">
+        <span class="brand-mark" aria-hidden="true"><i></i><i></i><i></i></span>
+        <span>outention</span>
+      </a>
+      <nav aria-label="Päänavigaatio">
+        <button class="locale-toggle" type="button" data-locale-toggle aria-label="Vaihda suomeksi">FI</button>
+        <button class="help-button" id="help-button" type="button" aria-label="Mikä Outention on?" title="Mikä Outention on?">?</button>
+        <span class="global-status" id="global-status">○ Ei lähteitä</span>
+        <button class="nav-button account-button" id="account-button" type="button" data-open-account>Kirjaudu</button>
+        <button class="nav-button publish-button" type="button" data-open-publisher>Julkaise</button>
+        <button class="nav-button source-button" type="button" data-open-library>Yhteydet</button>
+        <button class="avatar" type="button" data-open-profile aria-label="Oma konteksti">●</button>
+      </nav>
+    </header>
+
+    <main id="top" class="social-layout">
+      <aside class="left-rail" aria-label="Sovelluksen osiot">
+        <a class="rail-item is-active" href="#top"><span aria-hidden="true">⌂</span><strong>Koti</strong></a>
+        <a class="rail-item" href="#feed-shell"><span aria-hidden="true">≋</span><strong>Feedi</strong></a>
+        <button class="rail-item" type="button" data-open-saved><span aria-hidden="true">☆</span><strong>Tallennetut</strong></button>
+        <button class="rail-item" type="button" data-open-publisher><span aria-hidden="true">＋</span><strong>Julkaise</strong></button>
+        <a class="rail-item" href="#control-deck"><span aria-hidden="true">☷</span><strong>Järjestys</strong></a>
+        <button class="rail-item" type="button" data-open-library><span aria-hidden="true">＋</span><strong>Yhteydet</strong></button>
+        <button class="rail-item" type="button" data-open-profile><span aria-hidden="true">●</span><strong>Oma konteksti</strong></button>
+      </aside>
+
+      <div class="timeline-column">
+        <div class="timeline-title"><h1>Sinulle</h1><span>Tänään</span></div>
+
+        <section class="intent-hero" aria-label="Muokkaa feediä">
+          <form class="intent-form" id="intent-form">
+            <span class="composer-avatar" aria-hidden="true">●</span>
+            <div class="composer-body">
+              <label class="sr-only" for="intent-input">Mitä haluat nähdä feedissä?</label>
+              <textarea id="intent-input" rows="2" placeholder="Mitä haluat nähdä feedissä juuri nyt?"></textarea>
+              <div class="composer-footer">
+                <div class="suggestions" aria-label="Valmiit intentiot">
+                  <button type="button" title="Ihmisteni kuulumiset" aria-label="Ihmisteni kuulumiset" data-intent="Henkilökohtaisia kuulumisia ihmisiltä, joita seuraan. Ei uutisia eikä työasioita.">☕</button>
+                  <button type="button" title="Mitä olen missannut?" aria-label="Mitä olen missannut?" data-intent="Mitkä tärkeät keskustelut ja tapahtumat olen missannut tänään? Eri näkökulmia ja alkuperäisiä julkaisuja, ei klikkiotsikoita.">✦</button>
+                  <button type="button" title="Hyvää energiaa" aria-label="Hyvää energiaa" data-intent="Jotain toiveikasta, rauhallista ja vähän yllättävää. Ei politiikkaa.">☀</button>
+                  <span class="composer-hint">Enter lähettää</span>
+                </div>
+                <button class="listen-button" type="submit"><span class="button-label">Päivitä feedi</span><span aria-hidden="true">→</span></button>
+              </div>
+            </div>
+          </form>
+          <p class="notice" id="notice" role="status" aria-live="polite" hidden></p>
+
+          <section class="control-deck" id="control-deck" aria-labelledby="controls-title">
+          <div class="control-deck-header">
+            <div>
+              <h2 id="controls-title">Feedin järjestys</h2>
+              <p id="control-summary">Tasapainoinen kattaus omista ihmisistä ja uusista löydöistä.</p>
+            </div>
+            <div class="deck-actions">
+              <button type="button" class="text-button" id="undo-change" disabled>Kumoa</button>
+              <button type="button" class="text-button" id="reset-controls">Oletukset</button>
+              <button type="button" class="icon-button" id="toggle-controls" aria-expanded="false" aria-controls="control-body" aria-label="Avaa feediohjain">+</button>
+            </div>
+          </div>
+
+          <div id="control-body" hidden>
+            <div class="preset-row" aria-label="Algoritmin pikavalinnat">
+              <span>Painotus</span>
+              <button type="button" data-preset="familiar">Omat ihmiset</button>
+              <button type="button" class="is-active" data-preset="balanced">Tasapaino</button>
+              <button type="button" data-preset="discovery">Uusia ääniä</button>
+            </div>
+
+            <form class="algorithm-controls" id="algorithm-controls">
+              <label><span>Osuvuus</span><output>45</output><input type="range" name="relevance" min="0" max="100" value="45" /></label>
+              <label><span>Tuoreus</span><output>20</output><input type="range" name="freshness" min="0" max="100" value="20" /></label>
+              <label><span>Tutut ↔ löydöt</span><output>tutut 70</output><input type="range" name="familiarity_target" min="0" max="100" value="70" /></label>
+              <label><span>Suosio</span><output>5</output><input type="range" name="engagement" min="0" max="100" value="5" /></label>
+              <label><span>Tekijää kohden</span><output>2</output><input type="range" name="max_per_author" min="1" max="5" value="2" /></label>
+            </form>
+
+            <div class="history-panel" id="history-panel" hidden>
+              <div class="history-heading">
+                <span><strong>Korjaushistoria</strong> · tämän istunnon aikana</span>
+                <button type="button" class="text-button danger" id="reset-session">Aloita alusta</button>
+              </div>
+              <div class="history-list" id="history-list" aria-label="Feedin versiohistoria"></div>
+            </div>
+          </div>
+          </section>
+        </section>
+
+        <section class="feed-shell" id="feed-shell" aria-live="polite" hidden>
+          <div class="feed-main">
+          <div class="lens-panel" id="lens-panel">
+            <div>
+              <span class="current-feed-label">Nykyinen feedi</span>
+              <strong class="current-feed-intent" id="current-feed-intent"></strong>
+              <div class="lens-chips" id="lens-chips"></div>
+            </div>
+            <div class="lens-actions">
+              <button type="button" class="save-feed" id="save-feed">Tallenna</button>
+              <a href="#control-deck" class="adjust-link">Säädä <span aria-hidden="true">↑</span></a>
+            </div>
+          </div>
+
+          <form class="refine-form" id="refine-form">
+            <div>
+              <label class="sr-only" for="refine-input">Tarkenna feediä</label>
+              <input id="refine-input" type="text" autocomplete="off" placeholder="Tarkenna: enemmän kokemuksia, vähemmän uutisia…" />
+              <button type="submit">Tarkenna <span aria-hidden="true">→</span></button>
+            </div>
+          </form>
+
+          <div class="feed-heading">
+            <h2>Feedi</h2>
+            <span id="result-count"></span>
+          </div>
+
+          <div class="feed-list" id="feed-list"></div>
+          <div class="feed-continuation" id="feed-continuation" hidden>
+            <span class="continuation-sentinel" id="continuation-sentinel" aria-hidden="true"></span>
+            <button type="button" id="load-more"><span class="load-more-label">Lataa lisää</span><span aria-hidden="true">↓</span></button>
+            <small id="continuation-note">Seuraava erä on jo järjestetty — ei uutta mallikutsua.</small>
+          </div>
+          </div>
+        </section>
+      </div>
+
+      <aside class="right-rail">
+        <section class="connect-panel" id="connect-panel">
+          <div class="connect-copy">
+            <span class="connect-icon">🦋</span>
+            <div><strong>Bluesky</strong><p>Tuo seuraamiesi ihmisten julkaisut mukaan.</p></div>
+          </div>
+          <details class="credential-help">
+            <summary>App-salasanan ohje</summary>
+            <ol>
+              <li>Avaa <a href="https://bsky.app/settings/app-passwords" target="_blank" rel="noreferrer">Blueskyn App Passwords -asetukset</a>.</li>
+              <li>Valitse <strong>Add App Password</strong> ja luo salasana nimellä <strong>Outention beta</strong>.</li>
+              <li>Kopioi muotoa <code>xxxx-xxxx-xxxx-xxxx</code> oleva salasana tähän.</li>
+              <li>Voit perua pääsyn poistamalla app-salasanan Blueskyn asetuksista.</li>
+            </ol>
+          </details>
+          <form id="connect-form">
+            <label><span>Tunnus</span><input name="identifier" autocomplete="username" placeholder="sinä.bsky.social" required /></label>
+            <label><span>App-salasana</span><input name="password" type="password" autocomplete="off" placeholder="xxxx-xxxx-xxxx-xxxx" required /></label>
+            <button type="submit">Yhdistä</button>
+          </form>
+          <p class="connect-status" id="connect-status" aria-live="polite"></p>
+        </section>
+
+        <section class="source-sidebar" aria-labelledby="source-title">
+          <div class="sidebar-heading">
+            <h2 id="source-title">Yhteydet</h2>
+            <button type="button" class="add-source" data-open-library aria-label="Lisää lähde">+</button>
+          </div>
+          <div id="source-list" class="source-list"></div>
+        </section>
+      </aside>
+    </main>
+
+    <dialog id="onboarding-dialog" class="onboarding-dialog" aria-labelledby="onboarding-title">
+      <div class="onboarding-topbar">
+        <a class="brand" href="#top" tabindex="-1" aria-hidden="true">
+          <span class="brand-mark"><i></i><i></i><i></i></span>
+          <span>outention</span>
+        </a>
+        <button type="button" class="dialog-close" data-close-onboarding aria-label="Sulje">×</button>
+      </div>
+
+      <div class="onboarding-progress" aria-label="Opastuksen eteneminen">
+        <span id="onboarding-step-label">Perusidea · 1/5</span>
+        <div aria-hidden="true"><i class="is-active"></i><i></i><i></i><i></i><i></i></div>
+      </div>
+
+      <section class="onboarding-step is-active" data-onboarding-step="0">
+        <p class="onboarding-kicker">Avoin ja henkilökohtainen somefeedi</p>
+        <h2 id="onboarding-title">Sinä päätät, mitä haluat kuulla juuri nyt.</h2>
+        <p class="onboarding-lead">Outention on intention ohjaama open source -somefeedi. Kerrot tavoitteen luonnollisella kielellä, ja se kokoaa alkuperäiset julkaisut eri lähteistä yhdeksi hetkelliseksi feediksi.</p>
+        <div class="onboarding-principles">
+          <article><span>1</span><div><strong>Intentio ohjaa</strong><p>“Päivän puheenaiheet ilman klikkiotsikoita” tai “rauhallisia kuulumisia ihmisiltäni” on algoritmin tämänhetkinen tehtävä.</p></div></article>
+          <article><span>2</span><div><strong>AI järjestää, ei vastaa</strong><p>Kielimalli tulkitsee pyynnön ja auttaa rankkauksessa. Se ei kirjoita ihmisten sisältöjä uudelleen eikä korvaa feediä yhteenvedolla.</p></div></article>
+          <article><span>3</span><div><strong>Alkuperäinen säilyy</strong><p>Näet tekijän, julkaisun ja lähteen. Voit aina avata alkuperäisen sisällön omalla alustallaan.</p></div></article>
+        </div>
+      </section>
+
+      <section class="onboarding-step" data-onboarding-step="1" hidden>
+        <p class="onboarding-kicker">Ensimmäinen yhteys</p>
+        <h2 id="onboarding-model-heading">Yhdistä valitsemasi kielimalli</h2>
+        <p class="onboarding-lead">Outention käyttää omaa API-avaintasi vain intention tulkintaan ja rajatun ehdokasjoukon arviointiin. BYOK ei tee kutsusta paikallista: arvioitava teksti lähetetään valitsemallesi mallipalvelulle.</p>
+        <div class="onboarding-status-card">
+          <span class="onboarding-status-icon" aria-hidden="true">✦</span>
+          <div><strong id="onboarding-model-title">Malliyhteys puuttuu</strong><p id="onboarding-model-detail">Valitse OpenAI, Anthropic, Gemini, OpenRouter tai paikallinen malli.</p></div>
+          <span class="onboarding-status-dot" id="onboarding-model-dot"></span>
+        </div>
+        <button type="button" class="onboarding-setup-button" data-onboarding-model>Avaa malliasetukset <span aria-hidden="true">↗</span></button>
+        <p class="onboarding-footnote">Personal Mode tallentaa avaimen oletuksena vain oman koneesi paikalliseen asetustiedostoon. Asetukset näyttää tiedoston tarkan polun ennen tallentamista.</p>
+      </section>
+
+      <section class="onboarding-step" data-onboarding-step="2" hidden>
+        <p class="onboarding-kicker">Mistä feedi rakennetaan?</p>
+        <h2 id="onboarding-sources-heading">Valitse omat ja julkiset lähteesi</h2>
+        <p class="onboarding-lead">Omat yhteydet tuovat seuraamiesi ihmisten julkaisut. Julkinen löytö voi hakea saman intention mukaista sisältöä niiden ulkopuolelta.</p>
+        <div class="onboarding-source-types">
+          <article><strong>Omat virrat</strong><p>Bluesky Home, Mastodon Home ja Reddit Home silloin, kun alustan rajapinta sallii sen.</p></article>
+          <article><strong>Julkinen löytö</strong><p>Bluesky-, Mastodon- ja Threads-haku, Reddit-haku, RSS, YouTube, Yle, Hacker News ja Locationews.</p></article>
+        </div>
+        <div class="onboarding-ready-row"><span id="onboarding-source-status">Ei vielä lähteitä</span><button type="button" data-onboarding-sources>Valitse lähteet <span aria-hidden="true">↗</span></button></div>
+        <p class="onboarding-footnote">Julkinen Bluesky- ja Mastodon-löytö sekä Hacker News toimivat heti. Henkilökohtaiset virrat voi yhdistää myöhemmin.</p>
+      </section>
+
+      <section class="onboarding-step" data-onboarding-step="3" hidden>
+        <p class="onboarding-kicker">Valmista</p>
+        <h2 id="onboarding-intent-heading">Mistä haluaisit kuulla tänään?</h2>
+        <p class="onboarding-lead">Intentio voi kuvata aihetta, tunnelmaa, tiedontarvetta, ihmisiä tai asioita joita et halua nähdä. Voit muuttaa sitä jokaisella haulla.</p>
+        <label class="onboarding-intent" for="onboarding-intent-input">
+          <span>Ensimmäinen intentiosi</span>
+          <textarea id="onboarding-intent-input" rows="4" placeholder="Esim. päivän tärkeät puheenaiheet eri näkökulmista, ei klikkiotsikoita"></textarea>
+        </label>
+        <div class="onboarding-examples" aria-label="Esimerkki-intentiot">
+          <button type="button" data-onboarding-intent="Mitkä tärkeät keskustelut ja tapahtumat ovat käynnissä tänään? Eri näkökulmia ja alkuperäisiä julkaisuja, ei klikkiotsikoita.">Päivän puheenaiheet</button>
+          <button type="button" data-onboarding-intent="Henkilökohtaisia ja rauhallisia kuulumisia ihmisiltä, joita seuraan. Ei uutisia.">Ihmisteni kuulumiset</button>
+          <button type="button" data-onboarding-intent="Kiinnostavia kirjoja, elokuvia, musiikkia ja muita kulttuurilöytöjä ihmisiltä, ei mainoksia.">Kulttuurilöytöjä</button>
+          <button type="button" data-onboarding-intent="Jotain toiveikasta, rauhallista ja vähän yllättävää. Ei politiikkaa eikä vihastuttavaa sisältöä.">Hyvää energiaa</button>
+        </div>
+      </section>
+
+      <section class="onboarding-step onboarding-mobile-step" data-onboarding-step="4" hidden>
+        <p class="onboarding-kicker">Valinnainen mobiilikäyttö</p>
+        <h2 id="onboarding-mobile-heading">Avaa sama Outention puhelimessa</h2>
+        <p class="onboarding-lead">Puhelimeen ei asenneta palvelinta. Tämä Outention jää käyntiin tietokoneelle tai palvelimelle, ja puhelin avaa sen turvallisen verkko-osoitteen asennettavana web-sovelluksena.</p>
+        <div class="mobile-route-tabs" role="tablist" aria-label="Mobiiliyhteyden tapa">
+          <button type="button" class="is-active" role="tab" aria-selected="true" data-mobile-route="tailscale">Tailscale · suositus</button>
+          <button type="button" role="tab" aria-selected="false" data-mobile-route="https">Oma HTTPS-domain</button>
+        </div>
+        <div class="mobile-route-panel" data-mobile-panel="tailscale">
+          <ol class="mobile-checklist">
+            <li><span>1</span><div><strong>Asenna Tailscale palvelinkoneelle</strong><p>Liitä kone omaan tailnet-verkkoosi. Outention saa jäädä kuuntelemaan vain localhostia.</p><a href="https://tailscale.com/download" target="_blank" rel="noreferrer">Avaa Tailscalen asennusohje ↗</a></div></li>
+            <li><span>2</span><div><strong>Jaa Outention yksityisesti</strong><p>Suorita tämä palvelinkoneen terminaalissa. Komento tulostaa henkilökohtaisen <code>https://…ts.net</code>-osoitteen.</p><div class="mobile-command"><code id="tailscale-command">tailscale serve --bg 4173</code><button type="button" data-copy-tailscale>Kopioi</button></div></div></li>
+            <li><span>3</span><div><strong>Aseta tulostunut osoite Outentionille</strong><p>Lisää osoite <code>PUBLIC_BASE_URL</code>-arvoksi samaan paikalliseen asetustiedostoon ja käynnistä Outention uudelleen. Asetukset näyttää tarkan polun.</p><label class="mobile-url-label" for="mobile-tailnet-url"><span>Tailnet-osoite</span><div><input id="mobile-tailnet-url" type="url" placeholder="https://oma-kone.example.ts.net" /><button type="button" data-open-mobile-url>Avaa</button></div></label></div></li>
+            <li><span>4</span><div><strong>Asenna Tailscale puhelimeen</strong><p>Kirjaudu samaan tailnetiin, avaa yllä oleva osoite ja lisää sivu Koti-valikkoon.</p><div class="mobile-store-links"><a href="https://tailscale.com/download/ios" target="_blank" rel="noreferrer">iPhone/iPad ↗</a><a href="https://tailscale.com/download/android" target="_blank" rel="noreferrer">Android ↗</a></div></div></li>
+          </ol>
+        </div>
+        <div class="mobile-route-panel" data-mobile-panel="https" hidden>
+          <div class="mobile-public-warning"><strong>Vain aina päällä olevalle palvelimelle</strong><p>Tarvitset domainin, HTTPS-reverse proxyn ja vahvan <code>BETA_ACCESS_CODE</code>-arvon. Älä julkaise suojaamatonta Personal Modea internetiin.</p></div>
+          <ol class="mobile-checklist compact">
+            <li><span>1</span><div><strong>Osoita domain palvelimelle</strong><p>Esimerkiksi <code>outention.example.com</code>.</p></div></li>
+            <li><span>2</span><div><strong>Ota HTTPS ja pääsysuoja käyttöön</strong><p>Aseta sama HTTPS-osoite myös <code>PUBLIC_BASE_URL</code>-arvoksi.</p></div></li>
+            <li><span>3</span><div><strong>Avaa puhelimella ja lisää Koti-valikkoon</strong><p>iOS: Jaa → Lisää Koti-valikkoon. Android: selaimen valikko → Asenna sovellus.</p></div></li>
+          </ol>
+        </div>
+        <p class="mobile-copy-status" id="mobile-copy-status" role="status" aria-live="polite"></p>
+      </section>
+
+      <footer class="onboarding-actions">
+        <button type="button" class="onboarding-skip" id="onboarding-skip">Ohita opastus</button>
+        <div>
+          <button type="button" class="onboarding-back" id="onboarding-back" hidden>Takaisin</button>
+          <button type="button" class="onboarding-next" id="onboarding-next">Jatka <span aria-hidden="true">→</span></button>
+        </div>
+      </footer>
+    </dialog>
+
+    <dialog id="library-dialog" aria-labelledby="library-dialog-title">
+      <div class="dialog-header">
+        <div><h2 id="library-dialog-title">Yhteydet</h2></div>
+        <button type="button" class="dialog-close" aria-label="Sulje">×</button>
+      </div>
+      <p>Valitse feedissä käytettävät lähteet.</p>
+      <div class="library-grid" id="library-grid"></div>
+      <div class="connector-forms">
+        <form id="mastodon-form" class="connector-form">
+          <label for="mastodon-instance"><strong>Mastodon-instanssi</strong><span>Oma Home-timeline OAuthilla</span></label>
+          <div><input id="mastodon-instance" name="instance" placeholder="mastodon.social" required /><button type="submit">Yhdistä</button></div>
+        </form>
+        <form id="rss-form" class="connector-form">
+          <label for="rss-url"><strong>RSS, Atom, podcast tai YouTube-kanava</strong><span>Julkinen syöte · ei kirjautumista</span></label>
+          <div><input id="rss-name" name="name" aria-label="Lähteen nimi" placeholder="Nimi (valinnainen)" /><input id="rss-url" name="url" type="url" placeholder="https://…" required /><button type="submit">Lisää</button></div>
+        </form>
+        <form id="opml-form" class="connector-form">
+          <label for="opml-file"><strong>Tuo tilaukset OPML-tiedostosta</strong><span>RSS-lukijan vientitiedosto · enintään 24 syötettä</span></label>
+          <div><input id="opml-file" name="opml" type="file" accept=".opml,.xml,text/xml,application/xml" required /><button type="submit">Tuo</button></div>
+        </form>
+        <form id="locationews-form" class="connector-form">
+          <label for="locationews-context"><strong>Locationews</strong><span>Kerro paikkakunta omin sanoin tai jätä tyhjäksi</span></label>
+          <div><input id="locationews-context" name="context" maxlength="500" placeholder="Esim. uutisia Tampereelta" /><button type="submit">Ota käyttöön</button></div>
+        </form>
+        <p id="library-status" class="connect-status" aria-live="polite"></p>
+      </div>
+    </dialog>
+
+    <dialog id="profile-dialog" class="profile-dialog" aria-labelledby="profile-dialog-title">
+      <div class="dialog-header">
+        <div><h2 id="profile-dialog-title">Oma konteksti</h2></div>
+        <button type="button" class="dialog-close" data-close-profile aria-label="Sulje">×</button>
+      </div>
+      <p>Valinnainen taustatieto auttaa Outentionia ymmärtämään, mikä on sinulle olennaista myös lyhyissä pyynnöissä.</p>
+      <form id="profile-form">
+        <label for="profile-context"><strong>Kerro itsestäsi ja siitä, mistä olet kiinnostunut</strong><span>Esimerkiksi asuinpaikka, kielet, harrastukset, työ ja aiheet joita haluat seurata.</span></label>
+        <textarea id="profile-context" name="context" rows="7" maxlength="1500" placeholder="Asun Suomessa. Minua kiinnostavat yhteiskunta, kulttuuri, luonto ja uudet ideat…"></textarea>
+        <p class="profile-privacy">Säilyy vain tällä laitteella. Lähetetään palvelimelle feedin järjestämisen ajaksi; sitä ei julkaista eikä käytetä mallin kouluttamiseen.</p>
+        <p id="profile-location" class="profile-location" hidden></p>
+        <div class="profile-actions"><button type="button" class="secondary-button" id="clear-profile">Tyhjennä</button><span id="profile-status" role="status" aria-live="polite"></span><button type="submit">Tallenna</button></div>
+      </form>
+    </dialog>
+
+    <dialog id="account-dialog" class="account-dialog" aria-labelledby="account-dialog-title">
+      <div class="dialog-header">
+        <div><h2 id="account-dialog-title">Outention-tili</h2></div>
+        <button type="button" class="dialog-close" data-close-account aria-label="Sulje">×</button>
+      </div>
+      <p id="account-dialog-intro">Oma tilisi ei riipu mistään somepalvelusta. Lähteet liitetään siihen erikseen.</p>
+      <form id="account-form">
+        <label for="account-email"><strong>Sähköposti</strong></label>
+        <input id="account-email" name="email" type="email" autocomplete="email" required />
+        <label for="account-password"><strong>Salasana</strong><span>Vähintään 12 merkkiä</span></label>
+        <input id="account-password" name="password" type="password" minlength="12" maxlength="512" autocomplete="current-password" required />
+        <div class="account-actions"><button type="button" class="secondary-button" id="account-register">Luo tili</button><button type="submit">Kirjaudu</button></div>
+      </form>
+      <section id="account-signed" class="account-signed" hidden>
+        <span id="account-mode-label">Kirjautuneena</span><strong id="account-identity"></strong>
+        <details open>
+          <summary>Oma malliyhteys</summary>
+          <p>Käytä omaa API-avaintasi kuraattoriin. Sisällöt lähetetään valitsemallesi mallipalvelulle vain feedin järjestämistä varten.</p>
+          <form id="model-key-form">
+            <label for="model-provider"><strong>Mallipalvelu</strong></label>
+            <select id="model-provider" name="provider">
+              <option value="openai">OpenAI</option>
+              <option value="anthropic">Anthropic</option>
+              <option value="gemini">Google Gemini</option>
+              <option value="openrouter">OpenRouter · OpenAI / Gemini / Claude</option>
+              <option value="local">Paikallinen malli</option>
+            </select>
+            <label for="model-name"><strong>Malli</strong><span id="model-hint"></span></label>
+            <input id="model-name" name="model" type="text" maxlength="150" spellcheck="false" list="model-presets" required />
+            <datalist id="model-presets"></datalist>
+            <div id="model-base-url-field" hidden>
+              <label for="model-base-url"><strong>Paikallinen API-osoite</strong><span>OpenAI-yhteensopiva</span></label>
+              <input id="model-base-url" name="baseUrl" type="url" maxlength="300" value="http://127.0.0.1:11434/v1" spellcheck="false" />
+              <small>Ollama, LM Studio tai vLLM. Vain localhost ja host.docker.internal sallitaan.</small>
+            </div>
+            <label for="model-api-key"><strong>API-avain</strong><span>Ei koskaan näytetä uudelleen</span></label>
+            <input id="model-api-key" name="apiKey" type="password" minlength="16" maxlength="512" autocomplete="new-password" spellcheck="false" />
+            <label class="account-checkbox" id="model-persist-option" for="model-persist"><input id="model-persist" name="persist" type="checkbox" /><span><strong id="model-persist-title">Säilytä salattuna tilillä</strong><small id="model-persist-detail">Muuten avain poistuu palvelimen muistista uloskirjautuessa tai istunnon vanhetessa.</small></span></label>
+            <p id="model-key-status" class="account-inline-status" role="status" aria-live="polite"></p>
+            <div class="account-actions"><button type="button" class="secondary-button" id="model-key-remove">Poista avain</button><button type="submit">Tallenna avain</button></div>
+          </form>
+        </details>
+        <details data-account-only>
+          <summary>Salasana ja omat tiedot</summary>
+          <form id="account-password-form">
+            <label for="current-password"><strong>Nykyinen salasana</strong></label>
+            <input id="current-password" name="currentPassword" type="password" maxlength="512" autocomplete="current-password" required />
+            <label for="new-password"><strong>Uusi salasana</strong><span>Vähintään 12 merkkiä</span></label>
+            <input id="new-password" name="newPassword" type="password" minlength="12" maxlength="512" autocomplete="new-password" required />
+            <div class="account-actions"><button type="submit">Vaihda salasana</button></div>
+          </form>
+          <button type="button" class="secondary-button account-export" id="account-export">Lataa omat tiedot</button>
+        </details>
+        <details data-account-only>
+          <summary>Poista tili</summary>
+          <p>Poistaa tilin, kirjautumisistunnot ja salatut yhteydet pysyvästi.</p>
+          <form id="account-delete-form">
+            <label for="delete-password"><strong>Vahvista salasanalla</strong></label>
+            <input id="delete-password" name="password" type="password" maxlength="512" autocomplete="current-password" required />
+            <div class="account-actions"><button type="submit" class="danger-button">Poista tili pysyvästi</button></div>
+          </form>
+        </details>
+        <button type="button" class="secondary-button account-logout" id="account-logout" data-account-only>Kirjaudu ulos</button>
+      </section>
+      <p class="connect-status" id="account-status" role="status" aria-live="polite"></p>
+    </dialog>
+
+    <dialog id="saved-dialog" class="saved-dialog" aria-labelledby="saved-dialog-title">
+      <div class="dialog-header">
+        <div><h2 id="saved-dialog-title">Tallennetut feedit</h2></div>
+        <button type="button" class="dialog-close" data-close-saved aria-label="Sulje">×</button>
+      </div>
+      <p>Tallenna toimiva intentio ja sen järjestys. Valitse feedi, kun haluat hakea siihen uusimmat julkaisut.</p>
+      <div class="saved-feed-tools">
+        <button type="button" class="secondary-button" id="import-lens">Tuo intentiolasi</button>
+        <input id="import-lens-file" type="file" accept="application/json,.json,.outention-lens" hidden />
+        <small>Intentiolasi sisältää pyynnön ja ranking-säännöt — ei lähdetunnuksia tai feedin julkaisuja.</small>
+      </div>
+      <div class="saved-feed-list" id="saved-feed-list"></div>
+      <p class="saved-empty" id="saved-empty">Et ole vielä tallentanut feedejä.</p>
+    </dialog>
+
+    <dialog id="publisher-dialog" class="publisher-dialog" aria-labelledby="publisher-dialog-title">
+      <div class="dialog-header">
+        <div><h2 id="publisher-dialog-title">Uusi julkaisu</h2></div>
+        <button type="button" class="dialog-close" data-close-publisher aria-label="Sulje">×</button>
+      </div>
+      <form id="publisher-form">
+        <label class="sr-only" for="publisher-text">Mitä haluat sanoa?</label>
+        <textarea id="publisher-text" name="text" rows="7" maxlength="5000" placeholder="Mitä haluat sanoa?"></textarea>
+        <div class="publisher-meta"><span id="publisher-count">0 merkkiä</span><span>Julkaisu lähetetään suoraan valitsemiisi verkkoihin.</span></div>
+        <fieldset>
+          <legend>Julkaisukohteet</legend>
+          <div class="publisher-destinations" id="publisher-destinations"></div>
+        </fieldset>
+        <div class="publisher-actions">
+          <p class="connect-status" id="publisher-status" role="status" aria-live="polite"></p>
+          <button type="submit" id="publisher-submit">Julkaise</button>
+        </div>
+      </form>
+    </dialog>
+
+    <dialog id="media-dialog" class="media-dialog" aria-label="Median esikatselu">
+      <button type="button" class="media-close" aria-label="Sulje kuva">×</button>
+      <img id="media-dialog-image" alt="" />
+      <p id="media-dialog-caption"></p>
+    </dialog>
+
+    <template id="feed-card-template">
+      <article class="feed-card">
+        <div class="social-context" hidden></div>
+        <header>
+          <div class="author-block">
+            <span class="author-avatar"></span>
+            <div><strong class="author-name"></strong><span class="author-handle"></span></div>
+          </div>
+          <span class="source-badge"></span>
+        </header>
+        <div class="post-copy"><p class="post-text"></p><button class="expand-text" type="button" hidden>Näytä lisää</button></div>
+        <div class="media-host"></div>
+        <div class="post-meta"><span class="published-at"></span><span class="engagement"></span><span class="language"></span></div>
+        <div class="why-panel" hidden></div>
+        <footer>
+          <button class="why-button" type="button" aria-expanded="false">Miksi tämä?</button>
+          <a class="original-link" target="_blank" rel="noreferrer">Avaa alkuperäinen <span aria-hidden="true">↗</span></a>
+        </footer>
+      </article>
+    </template>
+
+    <script type="module" src="src/app.js?v=0.1.3"></script>
+  </body>
+</html>

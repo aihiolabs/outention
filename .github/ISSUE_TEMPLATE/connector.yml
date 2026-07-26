@@ -1,0 +1,24 @@
+name: Connector proposal
+description: Propose an official source-platform integration.
+title: "[Connector]: "
+labels: [connector]
+body:
+  - type: input
+    id: platform
+    attributes:
+      label: Platform and official API documentation
+    validations:
+      required: true
+  - type: textarea
+    id: capabilities
+    attributes:
+      label: Available capabilities
+      description: Personal feed, public discovery, publishing, OAuth and required scopes.
+    validations:
+      required: true
+  - type: textarea
+    id: constraints
+    attributes:
+      label: Terms, rate limits and known constraints
+    validations:
+      required: true

@@ -1,0 +1,15 @@
+.env
+.env.*
+!.env.example
+!.env.production.example
+node_modules/
+.DS_Store
+data/
+connections.enc.json
+.outention/*
+!.outention/.gitkeep
+
+# Managed Outention operator files are kept outside the public repository.
+DEPLOY-HETZNER.md
+compose.production.yaml
+.env.production.example

@@ -1,0 +1,31 @@
+name: CI
+
+on:
+  push:
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ matrix.node }}
+          cache: npm
+      - name: Node compatibility
+        run: node --version
+      - run: docker compose config --quiet
+      - run: npm ci
+      - run: npm run check
+      - run: npm test
+      - run: npm run smoke:personal
+      - run: npm run smoke:first-feed
+    strategy:
+      fail-fast: false
+      matrix:
+        node: [20, 22, 24]

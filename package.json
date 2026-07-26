@@ -1,0 +1,72 @@
+{
+  "name": "outention",
+  "version": "0.1.0",
+  "description": "An open-source, intention-driven social feed.",
+  "private": false,
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/aihiolabs/outention.git"
+  },
+  "homepage": "https://github.com/aihiolabs/outention#readme",
+  "bugs": {
+    "url": "https://github.com/aihiolabs/outention/issues"
+  },
+  "type": "module",
+  "bin": {
+    "outention": "./bin/outention.mjs"
+  },
+  "files": [
+    "bin/",
+    "docs/",
+    "scripts/",
+    "src/",
+    "tests/",
+    "access.html",
+    "index.html",
+    "server.mjs",
+    "styles.css",
+    "sw.js",
+    "manifest.webmanifest",
+    "favicon.svg",
+    "icon-192.png",
+    "icon-512.png",
+    "apple-touch-icon.png",
+    ".env.example",
+    "README.md",
+    "ROADMAP.md",
+    "LICENSE",
+    "SECURITY.md",
+    "CONTRIBUTING.md",
+    "CODE_OF_CONDUCT.md",
+    "CHANGELOG.md"
+  ],
+  "engines": {
+    "node": ">=20"
+  },
+  "scripts": {
+    "start": "node bin/outention.mjs --no-open --data-dir .outention",
+    "dev": "node server.mjs",
+    "doctor": "node bin/outention.mjs doctor --data-dir .outention",
+    "connector:create": "node scripts/create-connector.mjs",
+    "test": "node --test",
+    "audit:intents": "node scripts/audit-intents.mjs",
+    "smoke:personal": "node scripts/personal-http-smoke.mjs",
+    "smoke:first-feed": "node scripts/first-feed-smoke.mjs",
+    "smoke:account": "node scripts/account-http-smoke.mjs",
+    "check": "node --check server.mjs && node --check sw.js && node --check bin/outention.mjs && node --check src/app.js && node --check src/access.js && node --check src/i18n.js && node --check src/auth.js && node --check src/personal-store.js && node --check src/security.js && node --check src/providers/contract.js && node --check src/providers/registry.js && node --check src/providers/bluesky.js && node --check src/providers/reddit.js && node --check src/providers/mastodon.js && node --check src/providers/threads.js && node --check src/providers/rss.js && node --check src/providers/hackernews.js && node --check src/providers/locationews.js && node --check src/curator/openai.js && node --check src/curator/ranker.js && node --check scripts/create-connector.mjs && node --check scripts/account-http-smoke.mjs && node --check scripts/personal-http-smoke.mjs && node --check scripts/first-feed-smoke.mjs && node --check scripts/audit-intents.mjs"
+  },
+  "dependencies": {
+    "pg": "^8.22.0"
+  },
+  "keywords": [
+    "social-feed",
+    "local-first",
+    "byok",
+    "bluesky",
+    "mastodon",
+    "threads",
+    "rss",
+    "ai"
+  ]
+}
