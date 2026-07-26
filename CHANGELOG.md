@@ -16,3 +16,5 @@ The project follows [Semantic Versioning](https://semver.org/) once the first st
 - Added public Bluesky and Mastodon discovery even when no personal source is connected.
 - Added opaque per-call candidate IDs, bounded candidate text, OpenRouter no-data-collection routing and hardened untrusted RSS URLs.
 - Added local aggregate pipeline diagnostics and documented the layered onion architecture, quality gates and escalation policy.
+- Migrated the application build to TypeScript and Vite, with the first React-owned navigation surfaces and typed shared connector/ranking contracts.
+- Added deterministic language reconciliation for incorrectly declared Finnish and English social posts.

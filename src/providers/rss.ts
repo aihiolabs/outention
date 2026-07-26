@@ -1,8 +1,9 @@
 import { fetchPublicUrl, publicHttpsUrl } from "../security.js";
+import type { Candidate } from "../types.js";
 
 const MAX_BYTES = 2_000_000;
 
-export async function fetchRssFeed({ url, name }, { limit = 25, network = {} } = {}) {
+export async function fetchRssFeed({ url, name }, { limit = 25, network = {} } = {}): Promise<Candidate[]> {
   const feedUrl = publicFeedUrl(url);
   const response = await fetchPublicUrl(feedUrl, { headers: { accept: "application/atom+xml, application/rss+xml, application/xml, text/xml" } }, network);
   if (!response.ok) throw providerError(response.status, "Syötteen haku epäonnistui.");
@@ -66,7 +67,7 @@ function commonItem({ xml, feedUrl, sourceName, title, description, canonicalUrl
     id: `${youtube ? "youtube" : "rss"}:${stableId(guid)}`,
     sourceType: youtube ? "youtube" : "rss",
     sourceName: youtube ? "YouTube" : sourceName,
-    feedLayer: "discovery",
+    feedLayer: "discovery" as const,
     canonicalUrl: absoluteUrl(canonicalUrl, feedUrl),
     author: { id: authorName, name: authorName, handle: sourceName, avatar: null },
     text: [title, description && description !== title ? description : ""].filter(Boolean).join("\n\n").slice(0, 6000),
@@ -110,7 +111,7 @@ function decodeEntities(value) {
 
 function publicFeedUrl(value) {
   try { return publicHttpsUrl(value).toString(); }
-  catch (error) { throw providerError(error.status || 400, "Syötteen pitää olla julkinen HTTPS-osoite."); }
+  catch (error) { throw providerError(error instanceof Error && "status" in error ? Number(error.status) : 400, "Syötteen pitää olla julkinen HTTPS-osoite."); }
 }
 
 function absoluteUrl(value, base) {
@@ -119,4 +120,4 @@ function absoluteUrl(value, base) {
 }
 function stableId(value) { let hash = 2166136261; for (const char of value) { hash ^= char.codePointAt(0); hash = Math.imul(hash, 16777619); } return (hash >>> 0).toString(36); }
 async function readLimited(stream, maxBytes) { const reader = stream.getReader(); const chunks = []; let size = 0; while (true) { const { done, value } = await reader.read(); if (done) break; size += value.byteLength; if (size > maxBytes) { await reader.cancel(); throw providerError(413, "Syöte on liian suuri."); } chunks.push(value); } return new TextDecoder().decode(Buffer.concat(chunks)); }
-function providerError(status, message) { const error = new Error(message); error.status = status; return error; }
+function providerError(status: number, message: string): Error & { status: number } { return Object.assign(new Error(message), { status }); }

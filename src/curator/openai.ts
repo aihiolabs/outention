@@ -132,7 +132,7 @@ export async function evaluateCandidates({ provider = "openai", apiKey, model, b
   return parsed.evaluated.map(item => ({ ...item, id: opaqueIds.get(item.id) }));
 }
 
-export async function probeModelConnection({ provider = "openai", apiKey, model, baseUrl }) {
+export async function probeModelConnection({ provider = "openai", apiKey, model, baseUrl }: { provider?: string; apiKey: string; model: string; baseUrl?: string }) {
   const parsed = await requestStructuredWithRetry({
     provider, apiKey, model, baseUrl, schema: probeSchema, name: "outention_connection_probe",
     instructions: "Return the required JSON object with ok set to true. Do not add commentary.",
@@ -219,7 +219,7 @@ export async function curateFeed(options) {
 async function requestStructured({ provider, apiKey, model, baseUrl, schema, name, instructions, input }) {
   if (provider === "anthropic") return requestAnthropic({ apiKey, model, schema, name, instructions, input });
   if (provider === "openrouter") return requestOpenRouter({ apiKey, model, schema, name, instructions, input });
-  if (provider === "gemini") return requestGemini({ apiKey, model, schema, name, instructions, input });
+  if (provider === "gemini") return requestGemini({ apiKey, model, schema, instructions, input });
   if (provider === "local") return requestLocalCompatible({ apiKey, model, baseUrl, schema, name, instructions, input });
   if (provider !== "openai") throw curatorError(400, "Tuntematon mallipalvelu.");
   return requestOpenAI({ apiKey, model, schema, name, instructions, input });
@@ -302,7 +302,7 @@ async function requestOpenRouter({ apiKey, model, schema, name, instructions, in
 
 async function requestLocalCompatible({ apiKey, model, baseUrl, schema, name, instructions, input }) {
   if (isOllamaUrl(baseUrl)) return requestOllama({ model, baseUrl, schema, instructions, input });
-  const headers = { "content-type": "application/json" };
+  const headers: Record<string, string> = { "content-type": "application/json" };
   if (apiKey) headers.authorization = `Bearer ${apiKey}`;
   const response = await fetch(`${String(baseUrl).replace(/\/$/, "")}/chat/completions`, {
     method: "POST", signal: AbortSignal.timeout(120_000), headers,
@@ -423,4 +423,4 @@ function providerError(provider, status, data) {
   return curatorError(status >= 400 && status < 600 ? status : 502, `${label} epäonnistui${suffix}.`);
 }
 
-function curatorError(status, message) { const error = new Error(message); error.status = status; return error; }
+function curatorError(status: number, message: string): Error & { status: number } { return Object.assign(new Error(message), { status }); }

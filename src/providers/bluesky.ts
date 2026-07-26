@@ -1,3 +1,6 @@
+import { reconcileContentLanguage } from "../language.js";
+import type { Candidate } from "../types.js";
+
 const DEFAULT_PDS = "https://bsky.social";
 
 export async function connectBluesky({ identifier, password, service = DEFAULT_PDS }) {
@@ -42,7 +45,7 @@ export async function fetchBlueskyTimeline(session, { limit = 50 } = {}) {
   return (data.feed || []).map(entry => ({ ...normalizeFeedViewPost(entry), feedLayer: "personal" })).filter(item => item.text);
 }
 
-export async function searchBlueskyPosts(queries, { limitPerQuery = 15 } = {}) {
+export async function searchBlueskyPosts(queries: unknown[] = [], { limitPerQuery = 15 } = {}) {
   const cleanQueries = [...new Set((queries || []).map(query => String(query).trim()).filter(Boolean))].slice(0, 3);
   const responses = await Promise.allSettled(cleanQueries.map(async query => {
     const params = new URLSearchParams({ q: query, limit: String(Math.min(limitPerQuery, 25)), sort: "latest" });
@@ -51,9 +54,9 @@ export async function searchBlueskyPosts(queries, { limitPerQuery = 15 } = {}) {
     if (!response.ok) throw providerError(response.status, data.message || "Bluesky-haun suoritus epäonnistui.");
     return (data.posts || []).map(post => ({ ...normalizeFeedViewPost({ post }), feedLayer: "discovery", socialContext: `Bluesky-haku · ${query}` }));
   }));
-  const unique = new Map();
+  const unique = new Map<string, Candidate>();
   for (const item of responses.flatMap(result => result.status === "fulfilled" ? result.value : [])) if (item.text && !unique.has(item.id)) unique.set(item.id, item);
-  return [...unique.values()].sort((a, b) => new Date(b.publishedAt) - new Date(a.publishedAt));
+  return [...unique.values()].sort((a, b) => new Date(b.publishedAt).getTime() - new Date(a.publishedAt).getTime());
 }
 
 export async function publishBlueskyPost(session, { text, createdAt = new Date().toISOString() }) {
@@ -87,7 +90,7 @@ function normalizeFeedViewPost(entry) {
     canonicalUrl: blueskyUrl(post.uri, author.handle),
     author: { id: author.did, name: author.displayName || author.handle, handle: `@${author.handle}`, avatar: author.avatar || null },
     text: record.text || "",
-    language: Array.isArray(record.langs) ? record.langs[0] : null,
+    language: reconcileContentLanguage(record.text, Array.isArray(record.langs) ? record.langs[0] : null),
     publishedAt: record.createdAt || post.indexedAt,
     indexedAt: post.indexedAt,
     engagement: { likes: post.likeCount || 0, replies: post.replyCount || 0, reposts: post.repostCount || 0 },
@@ -135,9 +138,6 @@ function cleanOrigin(value) {
   return url.origin;
 }
 
-function providerError(status, message, providerCode = null) {
-  const error = new Error(message);
-  error.status = status;
-  error.providerCode = providerCode;
-  return error;
+function providerError(status: number, message: string, providerCode: string | null = null): Error & { status: number; providerCode: string | null } {
+  return Object.assign(new Error(message), { status, providerCode });
 }

@@ -56,9 +56,10 @@ if (!(await portAvailable(port, host))) {
   process.exit(1);
 }
 
-const child = spawn(process.execPath, [join(packageRoot, "server.mjs")], {
+const child = spawn(process.execPath, [join(packageRoot, "dist", "server.js")], {
   env: {
     ...process.env,
+    OUTENTION_PACKAGE_ROOT: packageRoot,
     OUTENTION_MODE: "personal",
     OUTENTION_IGNORE_PROJECT_ENV: "1",
     OUTENTION_CONFIG_PATH: join(dataDir, ".env.local"),

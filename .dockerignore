@@ -4,6 +4,7 @@
 !.env.production.example
 .git
 node_modules
+dist
 .outention
 npm-debug.log
 .DS_Store

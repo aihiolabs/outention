@@ -129,6 +129,14 @@ OpenRouter is the easiest default and the model field also offers `google/gemini
 
 ```bash
 npm ci
+npm run dev
+```
+
+`npm run dev` watches both the React/Vite browser bundle and the TypeScript Node.js server. Open `http://127.0.0.1:4173` and refresh after UI changes.
+
+Before opening a pull request, run:
+
+```bash
 npm run check
 npm test
 npm run smoke:personal
@@ -142,13 +150,16 @@ Run `npm run doctor` to check Node.js, the local data directory, the port, and o
 ## Project layout
 
 ```text
-server.mjs                 HTTP server and orchestration
-src/curator/openai.js      Structured-output provider adapters
-src/curator/ranker.js      Deterministic ranking and pagination
-src/providers/             Source connectors and normalization
-src/app.js                 Local-first feed UI
-src/auth.js                Optional managed multi-user accounts
-src/personal-store.js      Encrypted local source-session storage
+server.ts                  TypeScript HTTP server and orchestration
+src/main.tsx               React application entry point
+src/components/            React-owned UI surfaces
+src/app.ts                 Legacy feed controller during component migration
+src/curator/openai.ts      Structured-output provider adapters
+src/curator/ranker.ts      Deterministic ranking and pagination
+src/providers/             Typed source connectors and normalization
+src/types.ts               Shared feed and connector contracts
+src/auth.ts                Optional managed multi-user accounts
+src/personal-store.ts      Encrypted local source-session storage
 tests/                     Unit and contract tests
 compose.yaml               Single-user local installation
 ```

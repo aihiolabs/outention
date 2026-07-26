@@ -18,13 +18,14 @@
   },
   "files": [
     "bin/",
+    "dist/",
     "docs/",
     "scripts/",
     "src/",
     "tests/",
     "access.html",
     "index.html",
-    "server.mjs",
+    "server.ts",
     "styles.css",
     "sw.js",
     "manifest.webmanifest",
@@ -46,18 +47,25 @@
   },
   "scripts": {
     "start": "node bin/outention.mjs --no-open --data-dir .outention",
-    "dev": "node server.mjs",
+    "dev": "node scripts/dev.mjs",
     "doctor": "node bin/outention.mjs doctor --data-dir .outention",
     "connector:create": "node scripts/create-connector.mjs",
-    "test": "node --test",
+    "build": "npm run build:web && npm run build:server",
+    "build:web": "vite build",
+    "build:server": "tsc -p tsconfig.build.json",
+    "typecheck": "tsc -p tsconfig.json",
+    "prepare": "npm run build",
+    "test": "node --import tsx --test tests/*.test.mjs",
     "audit:intents": "node scripts/audit-intents.mjs",
-    "smoke:personal": "node scripts/personal-http-smoke.mjs",
-    "smoke:first-feed": "node scripts/first-feed-smoke.mjs",
-    "smoke:account": "node scripts/account-http-smoke.mjs",
-    "check": "node --check server.mjs && node --check sw.js && node --check bin/outention.mjs && node --check src/app.js && node --check src/access.js && node --check src/i18n.js && node --check src/auth.js && node --check src/personal-store.js && node --check src/security.js && node --check src/providers/contract.js && node --check src/providers/registry.js && node --check src/providers/bluesky.js && node --check src/providers/reddit.js && node --check src/providers/mastodon.js && node --check src/providers/threads.js && node --check src/providers/rss.js && node --check src/providers/hackernews.js && node --check src/providers/locationews.js && node --check src/curator/openai.js && node --check src/curator/ranker.js && node --check scripts/create-connector.mjs && node --check scripts/account-http-smoke.mjs && node --check scripts/personal-http-smoke.mjs && node --check scripts/first-feed-smoke.mjs && node --check scripts/audit-intents.mjs"
+    "smoke:personal": "node --import tsx scripts/personal-http-smoke.mjs",
+    "smoke:first-feed": "node --import tsx scripts/first-feed-smoke.mjs",
+    "smoke:account": "node --import tsx scripts/account-http-smoke.mjs",
+    "check": "npm run typecheck && npm run build && node --check sw.js && node --check bin/outention.mjs && node --check scripts/dev.mjs && node --check scripts/create-connector.mjs && node --check scripts/account-http-smoke.mjs && node --check scripts/personal-http-smoke.mjs && node --check scripts/first-feed-smoke.mjs && node --check scripts/audit-intents.mjs"
   },
   "dependencies": {
-    "pg": "^8.22.0"
+    "pg": "^8.22.0",
+    "react": "^19.2.8",
+    "react-dom": "^19.2.8"
   },
   "keywords": [
     "social-feed",
@@ -68,5 +76,14 @@
     "threads",
     "rss",
     "ai"
-  ]
+  ],
+  "devDependencies": {
+    "@types/node": "^26.1.1",
+    "@types/react": "^19.2.17",
+    "@types/react-dom": "^19.2.3",
+    "@vitejs/plugin-react": "^6.0.4",
+    "tsx": "^4.23.1",
+    "typescript": "^7.0.2",
+    "vite": "^8.1.5"
+  }
 }

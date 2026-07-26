@@ -6,6 +6,15 @@ Outention is a personal feed client, not a social network. It retrieves content 
 
 The model does not produce a replacement summary or answer.
 
+## Application stack
+
+- React and TypeScript own the interactive browser surfaces; the existing feed controller is being migrated component by component so behavior remains testable throughout the transition.
+- Vite builds the browser application and PWA assets into `dist/web`.
+- The TypeScript Node.js server owns orchestration, connector secrets, bounded retrieval and model-provider calls.
+- Shared candidate and ranking contracts live in `src/types.ts`; connector code must normalize into those provider-neutral types.
+
+Astro is intentionally reserved for a possible standalone marketing/documentation site. Next.js is not part of the personal product runtime: Outention does not need a hosted React backend, and keeping the local server explicit makes self-hosting and trust boundaries easier to inspect.
+
 ## Data flow
 
 ```text

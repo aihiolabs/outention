@@ -1,11 +1,8 @@
 import pg from "pg";
 import { createCipheriv, createDecipheriv, createHash, randomBytes, scrypt as scryptCallback, timingSafeEqual } from "node:crypto";
-import { promisify } from "node:util";
-
 const { Pool } = pg;
-const scrypt = promisify(scryptCallback);
 const SESSION_DAYS = 30;
-const migrations = [
+const migrations: Array<[number, string]> = [
   [1, `
     CREATE TABLE IF NOT EXISTS accounts (
       id TEXT PRIMARY KEY,
@@ -36,13 +33,16 @@ const migrations = [
 ];
 
 export class AuthStore {
-  constructor(connectionString, encryptionKey = "") {
+  pool: InstanceType<typeof Pool>;
+  encryptionKey: Buffer | null;
+
+  constructor(connectionString: string, encryptionKey = "") {
     if (!connectionString) throw new Error("DATABASE_URL is required for Outention accounts.");
     this.pool = new Pool({ connectionString, max: 10, idleTimeoutMillis: 30_000, connectionTimeoutMillis: 5_000 });
     this.encryptionKey = parseEncryptionKey(encryptionKey);
   }
 
-  async initialize() {
+  async initialize(): Promise<void> {
     const client = await this.pool.connect();
     try {
       await client.query("SELECT pg_advisory_lock(hashtext('outention_schema_migrations'))");
@@ -66,11 +66,11 @@ export class AuthStore {
     }
   }
 
-  async register(emailValue, passwordValue) {
+  async register(emailValue: unknown, passwordValue: unknown) {
     const email = normalizeEmail(emailValue);
     validatePassword(passwordValue);
     const salt = randomBytes(16);
-    const passwordHash = await derivePassword(passwordValue, salt);
+    const passwordHash = await derivePassword(String(passwordValue), salt);
     const account = { id: randomBytes(16).toString("base64url"), email, createdAt: new Date() };
     try {
       await this.pool.query(
@@ -78,13 +78,13 @@ export class AuthStore {
         [account.id, account.email, passwordHash.toString("base64url"), salt.toString("base64url")]
       );
     } catch (error) {
-      if (error.code === "23505") throw authError(409, "Tällä sähköpostilla on jo Outention-tili.");
+      if (isDatabaseError(error) && error.code === "23505") throw authError(409, "Tällä sähköpostilla on jo Outention-tili.");
       throw error;
     }
     return { account: publicAccount(account), ...await this.createSession(account.id) };
   }
 
-  async login(emailValue, passwordValue) {
+  async login(emailValue: unknown, passwordValue: unknown) {
     const email = normalizeEmail(emailValue);
     const { rows } = await this.pool.query(
       "SELECT id, email, password_hash, password_salt, created_at FROM accounts WHERE email = $1",
@@ -101,7 +101,7 @@ export class AuthStore {
     return { account: publicAccount({ id: row.id, email: row.email, createdAt: row.created_at }), ...await this.createSession(row.id) };
   }
 
-  async createSession(accountId) {
+  async createSession(accountId: string) {
     const token = randomBytes(32).toString("base64url");
     const expiresAt = new Date(Date.now() + SESSION_DAYS * 24 * 60 * 60 * 1000);
     await this.pool.query(
@@ -111,7 +111,7 @@ export class AuthStore {
     return { token, expiresAt: expiresAt.getTime() };
   }
 
-  async accountForToken(token) {
+  async accountForToken(token: string | null | undefined) {
     if (!token) return null;
     const { rows } = await this.pool.query(`
       SELECT accounts.id, accounts.email, accounts.created_at
@@ -122,16 +122,16 @@ export class AuthStore {
     return row ? publicAccount({ id: row.id, email: row.email, createdAt: row.created_at }) : null;
   }
 
-  async logout(token) {
+  async logout(token: string | null | undefined): Promise<void> {
     if (token) await this.pool.query("DELETE FROM auth_sessions WHERE token_hash = $1", [hashToken(token)]);
   }
 
-  async changePassword(accountId, currentPassword, newPassword, currentToken) {
+  async changePassword(accountId: string, currentPassword: unknown, newPassword: unknown, currentToken: string): Promise<void> {
     validatePassword(newPassword);
     const row = await this.passwordRow(accountId);
     await verifyPassword(row, currentPassword);
     const salt = randomBytes(16);
-    const passwordHash = await derivePassword(newPassword, salt);
+    const passwordHash = await derivePassword(String(newPassword), salt);
     const client = await this.pool.connect();
     try {
       await client.query("BEGIN");
@@ -143,7 +143,7 @@ export class AuthStore {
     } finally { client.release(); }
   }
 
-  async exportAccount(accountId) {
+  async exportAccount(accountId: string) {
     const accountResult = await this.pool.query("SELECT id, email, created_at FROM accounts WHERE id = $1", [accountId]);
     if (!accountResult.rows[0]) throw authError(404, "Outention-tiliä ei löytynyt.");
     const connectionResult = await this.pool.query("SELECT provider, updated_at FROM account_connections WHERE account_id = $1 ORDER BY provider", [accountId]);
@@ -155,13 +155,13 @@ export class AuthStore {
     };
   }
 
-  async deleteAccount(accountId, password) {
+  async deleteAccount(accountId: string, password: unknown): Promise<void> {
     const row = await this.passwordRow(accountId);
     await verifyPassword(row, password);
     await this.pool.query("DELETE FROM accounts WHERE id = $1", [accountId]);
   }
 
-  async passwordRow(accountId) {
+  async passwordRow(accountId: string) {
     const { rows } = await this.pool.query("SELECT id, password_hash, password_salt FROM accounts WHERE id = $1", [accountId]);
     if (!rows[0]) throw authError(404, "Outention-tiliä ei löytynyt.");
     return rows[0];
@@ -169,7 +169,7 @@ export class AuthStore {
 
   get connectionsEnabled() { return Boolean(this.encryptionKey); }
 
-  async saveConnection(accountId, provider, value) {
+  async saveConnection(accountId: string, provider: string, value: unknown): Promise<void> {
     if (!this.encryptionKey) throw new Error("DATA_ENCRYPTION_KEY is required for persistent connections.");
     validateProvider(provider);
     if (value == null) {
@@ -185,7 +185,7 @@ export class AuthStore {
     `, [accountId, provider, encrypted.ciphertext, encrypted.iv, encrypted.authTag]);
   }
 
-  async loadConnections(accountId) {
+  async loadConnections(accountId: string): Promise<Record<string, unknown>> {
     if (!this.encryptionKey) return {};
     const { rows } = await this.pool.query(
       "SELECT provider, ciphertext, iv, auth_tag FROM account_connections WHERE account_id = $1",
@@ -194,7 +194,7 @@ export class AuthStore {
     return Object.fromEntries(rows.map(row => [row.provider, decryptJson({ ciphertext: row.ciphertext, iv: row.iv, authTag: row.auth_tag }, this.encryptionKey)]));
   }
 
-  async deleteConnection(accountId, provider) {
+  async deleteConnection(accountId: string, provider: string): Promise<void> {
     validateProvider(provider);
     await this.pool.query("DELETE FROM account_connections WHERE account_id = $1 AND provider = $2", [accountId, provider]);
   }
@@ -203,52 +203,60 @@ export class AuthStore {
   async close() { await this.pool.end(); }
 }
 
-function normalizeEmail(value) {
+function normalizeEmail(value: unknown): string {
   const email = String(value || "").trim().toLowerCase();
   if (email.length > 254 || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) throw authError(400, "Anna kelvollinen sähköpostiosoite.");
   return email;
 }
 
-function validatePassword(value) {
+function validatePassword(value: unknown): void {
   const password = String(value || "");
   if (password.length < 12) throw authError(400, "Salasanassa pitää olla vähintään 12 merkkiä.");
   if (password.length > 512) throw authError(400, "Salasana on liian pitkä.");
 }
 
-function derivePassword(password, salt) {
-  return scrypt(password, salt, 64, { N: 32768, r: 8, p: 1, maxmem: 64 * 1024 * 1024 });
+function derivePassword(password: string, salt: Buffer): Promise<Buffer> {
+  return new Promise((resolve, reject) => {
+    scryptCallback(password, salt, 64, { N: 32768, r: 8, p: 1, maxmem: 64 * 1024 * 1024 }, (error, derivedKey) => {
+      if (error) reject(error);
+      else resolve(derivedKey);
+    });
+  });
 }
 
-async function verifyPassword(row, password) {
+async function verifyPassword(row: { password_salt: string; password_hash: string }, password: unknown): Promise<void> {
   const actual = await derivePassword(String(password || ""), Buffer.from(row.password_salt, "base64url"));
   const expected = Buffer.from(row.password_hash, "base64url");
   if (actual.length !== expected.length || !timingSafeEqual(actual, expected)) throw authError(401, "Sähköposti tai salasana on väärin.");
 }
 
-function parseEncryptionKey(value) {
+function parseEncryptionKey(value: string): Buffer | null {
   if (!value) return null;
   const key = /^[a-f0-9]{64}$/i.test(value) ? Buffer.from(value, "hex") : Buffer.from(value, "base64url");
   if (key.length !== 32) throw new Error("DATA_ENCRYPTION_KEY must contain exactly 32 bytes.");
   return key;
 }
 
-function validateProvider(provider) {
+function validateProvider(provider: string): void {
   if (!/^[a-z][a-z0-9_-]{0,39}$/.test(String(provider))) throw new Error("Invalid connection provider.");
 }
 
-function encryptJson(value, key) {
+function encryptJson(value: unknown, key: Buffer) {
   const iv = randomBytes(12);
   const cipher = createCipheriv("aes-256-gcm", key, iv);
   const ciphertext = Buffer.concat([cipher.update(JSON.stringify(value), "utf8"), cipher.final()]);
   return { ciphertext: ciphertext.toString("base64url"), iv: iv.toString("base64url"), authTag: cipher.getAuthTag().toString("base64url") };
 }
 
-function decryptJson(value, key) {
+function decryptJson(value: { iv: string; authTag: string; ciphertext: string }, key: Buffer): unknown {
   const decipher = createDecipheriv("aes-256-gcm", key, Buffer.from(value.iv, "base64url"));
   decipher.setAuthTag(Buffer.from(value.authTag, "base64url"));
   return JSON.parse(Buffer.concat([decipher.update(Buffer.from(value.ciphertext, "base64url")), decipher.final()]).toString("utf8"));
 }
 
-function hashToken(token) { return createHash("sha256").update(String(token)).digest("base64url"); }
-function publicAccount(account) { return { id: account.id, email: account.email, createdAt: new Date(account.createdAt).toISOString() }; }
-function authError(status, message) { const error = new Error(message); error.status = status; return error; }
+function hashToken(token: string): string { return createHash("sha256").update(String(token)).digest("base64url"); }
+function publicAccount(account: { id: string; email: string; createdAt: string | Date }) { return { id: account.id, email: account.email, createdAt: new Date(account.createdAt).toISOString() }; }
+function authError(status: number, message: string): Error & { status: number } { return Object.assign(new Error(message), { status }); }
+function isDatabaseError(error: unknown): error is Error & { code: string } {
+  return error instanceof Error && "code" in error;
+}

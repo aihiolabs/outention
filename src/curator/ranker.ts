@@ -1,4 +1,6 @@
-export function rankEvaluatedCandidates({ candidates, evaluated, program, limit = 20, offset = 0 }) {
+import type { Candidate, Engagement, EvaluationSignal, OriginScope, RankedCandidate, RankingProgram, RankingWeights, SelectionMode } from "../types.js";
+
+export function rankEvaluatedCandidates({ candidates, evaluated, program, limit = 20, offset = 0 }: { candidates: Candidate[]; evaluated: EvaluationSignal[]; program: RankingProgram; limit?: number; offset?: number }): RankedCandidate[] {
   const signals = new Map(evaluated.map(item => [item.id, item]));
   const weights = normalizedWeights(program.weights);
   const horizon = clamp(program.horizon_hours, 6, 336, 72);
@@ -24,9 +26,9 @@ export function rankEvaluatedCandidates({ candidates, evaluated, program, limit 
     return [{ item, signal, score, components: { relevance: signal.semantic_score, tone: signal.tone_score, freshness, familiarity: familiarityFit, engagement } }];
   }).sort((a, b) => b.score - a.score);
 
-  const authorCounts = new Map();
-  const sourceCounts = new Map();
-  const selected = [];
+  const authorCounts = new Map<string, number>();
+  const sourceCounts = new Map<string, number>();
+  const selected: RankedCandidate[] = [];
   const remaining = [...scored];
   while (remaining.length && selected.length < offset + limit) {
     const eligible = remaining.filter(entry => (authorCounts.get(authorKey(entry.item)) || 0) < maxPerAuthor);
@@ -51,41 +53,41 @@ export function rankEvaluatedCandidates({ candidates, evaluated, program, limit 
   return selected.slice(offset, offset + limit);
 }
 
-export function filterCandidatesBySelectionMode(candidates, selectionMode = "topical") {
+export function filterCandidatesBySelectionMode(candidates: Candidate[], selectionMode: SelectionMode = "topical"): Candidate[] {
   return candidates.filter(item => candidateMatchesSelectionMode(item, selectionMode));
 }
 
-export function filterCandidatesByRequiredSources(candidates, requiredSources = []) {
+export function filterCandidatesByRequiredSources(candidates: Candidate[], requiredSources: string[] = []): Candidate[] {
   return candidates.filter(item => candidateMatchesRequiredSources(item, requiredSources));
 }
 
-export function filterCandidatesByOriginScope(candidates, originScope = "any") {
+export function filterCandidatesByOriginScope(candidates: Candidate[], originScope: OriginScope = "any"): Candidate[] {
   return candidates.filter(item => candidateMatchesOriginScope(item, originScope));
 }
 
-function candidateMatchesSelectionMode(item, selectionMode) {
+function candidateMatchesSelectionMode(item: Candidate, selectionMode: SelectionMode = "topical"): boolean {
   if (selectionMode === "broad_personal") return item.feedLayer === "personal";
   return true;
 }
 
-function candidateMatchesRequiredSources(item, requiredSources = []) {
+function candidateMatchesRequiredSources(item: Candidate, requiredSources: string[] = []): boolean {
   if (!requiredSources.length) return true;
   return requiredSources.includes(candidateSourceId(item));
 }
 
-function candidateMatchesOriginScope(item, originScope) {
+function candidateMatchesOriginScope(item: Candidate, originScope: OriginScope = "any"): boolean {
   const peopleSource = item.feedLayer === "personal" || ["bluesky", "mastodon", "threads", "reddit"].includes(item.sourceType);
   if (originScope === "people") return peopleSource;
   if (originScope === "publishers") return !peopleSource;
   return true;
 }
 
-function candidateSourceId(item) {
+function candidateSourceId(item: Candidate): string {
   if (item.sourceType === "rss" && /\byle\b/i.test(String(item.sourceName || ""))) return "yle";
   return item.sourceType || "unknown";
 }
 
-export function summarizeRankingQuality({ candidates, evaluated, program }) {
+export function summarizeRankingQuality({ candidates, evaluated, program }: { candidates: Candidate[]; evaluated: EvaluationSignal[]; program: RankingProgram }) {
   const ranked = rankEvaluatedCandidates({ candidates, evaluated, program, limit: candidates.length });
   const byId = new Map(candidates.map(item => [item.id, item]));
   const authors = new Set();
@@ -108,21 +110,21 @@ export function summarizeRankingQuality({ candidates, evaluated, program }) {
   };
 }
 
-function relevanceFloor(relevanceWeight) {
+function relevanceFloor(relevanceWeight?: number): number {
   const weight = clamp(relevanceWeight, 0, 100, 45);
   return weight <= 0 ? 0 : Math.min(75, Math.max(60, weight * .8));
 }
 
-function wouldDominateSource(item, counts, selectedCount) {
+function wouldDominateSource(item: Candidate, counts: Map<string, number>, selectedCount: number): boolean {
   const source = sourceKey(item);
   const nextShare = ((counts.get(source) || 0) + 1) / (selectedCount + 1);
   return nextShare > .65;
 }
 
-function authorKey(item) { return item.author.id || item.author.handle; }
-function sourceKey(item) { return item.sourceType || item.sourceName || item.feedLayer || "unknown"; }
+function authorKey(item: Candidate): string { return item.author.id || item.author.handle || item.author.name; }
+function sourceKey(item: Candidate): string { return item.sourceType || item.sourceName || item.feedLayer || "unknown"; }
 
-export function selectCandidatePool(candidates, familiarityTarget = 70, limit = 80) {
+export function selectCandidatePool(candidates: Candidate[], familiarityTarget = 70, limit = 80): Candidate[] {
   const boundedLimit = clamp(limit, 1, 100, 80);
   const target = clamp(familiarityTarget, 0, 100, 70);
   const personalShare = .2 + .75 * target / 100;
@@ -135,14 +137,14 @@ export function selectCandidatePool(candidates, familiarityTarget = 70, limit = 
     const selectedIds = new Set(selected.map(item => item.id));
     selected.push(...candidates.filter(item => !selectedIds.has(item.id)).slice(0, boundedLimit - selected.length));
   }
-  return selected.sort((a, b) => new Date(b.publishedAt) - new Date(a.publishedAt));
+  return selected.sort((a, b) => new Date(b.publishedAt).getTime() - new Date(a.publishedAt).getTime());
 }
 
 // The deterministic middle layer of the onion: use source-native order,
 // metadata and cheap lexical signals to avoid sending the whole retrieval
 // buffer to a model. It deliberately keeps a per-source reserve so a noisy
 // source cannot erase the others before semantic evaluation.
-export function triageCandidates(candidates, program = {}, limit = 36) {
+export function triageCandidates(candidates: Candidate[], program: RankingProgram = {}, limit = 36): Candidate[] {
   const boundedLimit = clamp(limit, 1, 60, 36);
   if (candidates.length <= boundedLimit) return [...candidates];
   const terms = triageTerms(program);
@@ -159,9 +161,9 @@ export function triageCandidates(candidates, program = {}, limit = 36) {
     return { item, index, score: lexical + freshness + nativeOrder + personal + context };
   }).sort((a, b) => b.score - a.score || a.index - b.index);
 
-  const selected = [];
-  const selectedIds = new Set();
-  const sourceGroups = new Map();
+  const selected: TriageEntry[] = [];
+  const selectedIds = new Set<string>();
+  const sourceGroups = new Map<string, TriageEntry[]>();
   for (const entry of scored) {
     const key = sourceKey(entry.item);
     if (!sourceGroups.has(key)) sourceGroups.set(key, []);
@@ -179,13 +181,15 @@ export function triageCandidates(candidates, program = {}, limit = 36) {
   return selected.map(entry => entry.item);
 }
 
-function selectEntry(entry, selected, selectedIds) {
+interface TriageEntry { item: Candidate; index: number; score: number }
+
+function selectEntry(entry: TriageEntry | undefined, selected: TriageEntry[], selectedIds: Set<string>): void {
   if (!entry || selectedIds.has(entry.item.id)) return;
   selected.push(entry);
   selectedIds.add(entry.item.id);
 }
 
-function triageTerms(program) {
+function triageTerms(program: RankingProgram): string[] {
   const values = [
     program.intent,
     ...(program.include || []),
@@ -197,12 +201,12 @@ function triageTerms(program) {
   return [...new Set(values.flatMap(value => String(value || "").toLocaleLowerCase().match(/[\p{L}\p{N}]{3,}/gu) || []))].slice(0, 40);
 }
 
-function candidateText(item) {
+function candidateText(item: Candidate): string {
   return [item.text, item.title, item.sourceName, item.retrievalContext, ...(item.tags || [])]
     .filter(Boolean).join(" ").toLocaleLowerCase();
 }
 
-function normalizedWeights(input = {}) {
+function normalizedWeights(input: Partial<RankingWeights> = {}): RankingWeights {
   const values = {
     relevance: clamp(input.relevance, 0, 100, 45),
     tone: clamp(input.tone, 0, 100, 10),
@@ -211,15 +215,15 @@ function normalizedWeights(input = {}) {
     engagement: clamp(input.engagement, 0, 100, 5)
   };
   const total = Object.values(values).reduce((sum, value) => sum + value, 0) || 1;
-  return Object.fromEntries(Object.entries(values).map(([key, value]) => [key, value / total]));
+  return Object.fromEntries(Object.entries(values).map(([key, value]) => [key, value / total])) as unknown as RankingWeights;
 }
 
-function engagementScore({ likes = 0, replies = 0, reposts = 0 }) {
+function engagementScore({ likes = 0, replies = 0, reposts = 0 }: Engagement): number {
   const value = Math.max(0, likes + replies * 2 + reposts * 1.5);
   return Math.min(100, Math.log1p(value) / Math.log(1001) * 100);
 }
 
-function clamp(value, minimum, maximum, fallback) {
+function clamp(value: unknown, minimum: number, maximum: number, fallback: number): number {
   const number = Number(value);
   return Number.isFinite(number) ? Math.min(maximum, Math.max(minimum, number)) : fallback;
 }

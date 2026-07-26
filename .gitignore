@@ -3,6 +3,7 @@
 !.env.example
 !.env.production.example
 node_modules/
+dist/
 .DS_Store
 data/
 connections.enc.json

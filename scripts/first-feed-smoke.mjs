@@ -33,10 +33,11 @@ const modelServer = createServer(async (request, response) => {
 await new Promise(resolve => modelServer.listen(0, "127.0.0.1", resolve));
 modelPort = modelServer.address().port;
 
-const child = spawn(process.execPath, ["server.mjs"], {
+const child = spawn(process.execPath, ["dist/server.js"], {
   cwd: new URL("..", import.meta.url),
   env: {
     ...process.env,
+    OUTENTION_PACKAGE_ROOT: process.cwd(),
     OUTENTION_MODE: "personal", OUTENTION_IGNORE_PROJECT_ENV: "1", NODE_ENV: "development",
     HOST: "127.0.0.1", PORT: String(appPort), PUBLIC_BASE_URL: origin,
     OUTENTION_CONFIG_PATH: join(temporaryDirectory, ".env.local"),

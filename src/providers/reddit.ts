@@ -51,7 +51,7 @@ export async function fetchRedditHome(config, session, { limit = 40 } = {}) {
   return (data.data?.children || []).map(child => normalizeRedditPost(child.data)).filter(item => item.text);
 }
 
-export async function searchRedditPosts(config, session, queries, { limitPerQuery = 12 } = {}) {
+export async function searchRedditPosts(config, session, queries: unknown[] = [], { limitPerQuery = 12 } = {}) {
   const cleanQueries = [...new Set((queries || []).map(query => String(query).trim()).filter(Boolean))].slice(0, 3);
   const responses = await Promise.allSettled(cleanQueries.map(async query => {
     const params = new URLSearchParams({ q: query.slice(0, 120), limit: String(Math.min(limitPerQuery, 25)), raw_json: "1", sort: "relevance", t: "month", type: "link" });
@@ -62,9 +62,9 @@ export async function searchRedditPosts(config, session, queries, { limitPerQuer
     if (!response.ok) throw providerError(response.status, data.message || data.error || "Reddit-haun suoritus epäonnistui.");
     return (data.data?.children || []).map(child => ({ ...normalizeRedditPost(child.data), feedLayer: "discovery", socialContext: `Reddit-haku · ${query}` }));
   }));
-  const unique = new Map();
+  const unique = new Map<string, Candidate>();
   for (const item of responses.flatMap(result => result.status === "fulfilled" ? result.value : [])) if (item.text && !unique.has(item.id)) unique.set(item.id, item);
-  return [...unique.values()].sort((a, b) => new Date(b.publishedAt) - new Date(a.publishedAt));
+  return [...unique.values()].sort((a, b) => new Date(b.publishedAt).getTime() - new Date(a.publishedAt).getTime());
 }
 
 async function requestToken(config, body) {
@@ -119,8 +119,7 @@ function decodeEntities(value) {
   return value.replaceAll("&amp;", "&");
 }
 
-function providerError(status, message) {
-  const error = new Error(message);
-  error.status = status;
-  return error;
+function providerError(status: number, message: string): Error & { status: number } {
+  return Object.assign(new Error(message), { status });
 }
+import type { Candidate } from "../types.js";

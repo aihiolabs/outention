@@ -241,33 +241,34 @@ const english = new Map(Object.entries({
   "Intentiolasi sisältää pyynnön ja ranking-säännöt — ei lähdetunnuksia tai feedin julkaisuja.": "An intent lens contains the request and ranking rules — never source credentials or feed posts."
 }));
 
-export function t(finnish, englishText) {
+export function t(finnish: string, englishText?: string | null): string {
   return locale === "fi" ? finnish : englishText || english.get(finnish) || finnish;
 }
 
-export function applyLocale(root = document) {
+export function applyLocale(root: Document | Element = document): void {
   document.documentElement.lang = locale;
   document.title = t(document.title);
   for (const element of root.querySelectorAll("*")) {
     for (const attribute of ["aria-label", "title", "placeholder", "data-intent", "data-onboarding-intent"]) {
-      if (element.hasAttribute(attribute)) element.setAttribute(attribute, t(element.getAttribute(attribute)));
+      const value = element.getAttribute(attribute);
+      if (value !== null) element.setAttribute(attribute, t(value));
     }
     for (const node of element.childNodes) {
-      if (node.nodeType !== Node.TEXT_NODE || !node.textContent.trim()) continue;
+      if (node.nodeType !== Node.TEXT_NODE || !node.textContent?.trim()) continue;
       const before = node.textContent;
       const leading = before.match(/^\s*/)?.[0] || "";
       const trailing = before.match(/\s*$/)?.[0] || "";
       node.textContent = `${leading}${t(before.trim())}${trailing}`;
     }
   }
-  for (const meta of root.querySelectorAll('meta[name="description"],meta[property="og:description"]')) meta.content = t(meta.content);
+  for (const meta of root.querySelectorAll<HTMLMetaElement>('meta[name="description"],meta[property="og:description"]')) meta.content = t(meta.content);
   for (const button of root.querySelectorAll("[data-locale-toggle]")) {
     button.textContent = locale === "en" ? "FI" : "EN";
     button.setAttribute("aria-label", locale === "en" ? "Vaihda suomeksi" : "Switch to English");
   }
 }
 
-export function bindLocaleToggle(root = document) {
+export function bindLocaleToggle(root: Document | Element = document): void {
   for (const button of root.querySelectorAll("[data-locale-toggle]")) button.addEventListener("click", () => {
     localStorage.setItem(LOCALE_KEY, locale === "en" ? "fi" : "en");
     location.reload();

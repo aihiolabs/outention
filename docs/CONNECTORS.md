@@ -8,7 +8,7 @@ For a connector contributed to Outention itself, create the smallest valid provi
 npm run connector:create -- example-source
 ```
 
-An Outention connector is deliberately small: a versioned manifest, bounded retrieval, normalization into original-content candidates, fixtures, and a contract test. The stable helpers live in `src/providers/contract.js`.
+An Outention connector is deliberately small: a versioned manifest, bounded retrieval, normalization into original-content candidates, fixtures, and a contract test. The stable helpers live in `src/providers/contract.ts`, with shared types in `src/types.ts`.
 
 Every candidate must include a stable `id`, source identity, original text, author, publication time and an HTTPS canonical URL when one exists. A connector must not return model-written replacement content. Capabilities are declared explicitly as `personal-feed`, `discovery`, and/or `publishing`; request only the permissions needed for those capabilities.
 

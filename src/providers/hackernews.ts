@@ -1,6 +1,6 @@
 const API = "https://hacker-news.firebaseio.com/v0";
 
-export async function fetchHackerNews({ kind = "best", limit = 25 } = {}) {
+export async function fetchHackerNews({ kind = "best", limit = 25 } = {}): Promise<Candidate[]> {
   if (!["best", "top", "new"].includes(kind)) throw providerError(400, "Tuntematon Hacker News -syöte.");
   const idsResponse = await fetch(`${API}/${kind}stories.json`, { signal: AbortSignal.timeout(8_000) });
   if (!idsResponse.ok) throw providerError(idsResponse.status, "Hacker News -listan haku epäonnistui.");
@@ -17,7 +17,7 @@ function normalizeStory(story) {
     id: `hackernews:${story.id}`,
     sourceType: "hackernews",
     sourceName: "Hacker News",
-    feedLayer: "discovery",
+    feedLayer: "discovery" as const,
     canonicalUrl: story.url || `https://news.ycombinator.com/item?id=${story.id}`,
     author: { id: story.by, name: story.by, handle: "news.ycombinator.com", avatar: null },
     text: story.title,
@@ -32,4 +32,5 @@ function normalizeStory(story) {
   };
 }
 
-function providerError(status, message) { const error = new Error(message); error.status = status; return error; }
+function providerError(status: number, message: string): Error & { status: number } { return Object.assign(new Error(message), { status }); }
+import type { Candidate } from "../types.js";

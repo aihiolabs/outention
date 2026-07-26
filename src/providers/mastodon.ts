@@ -1,4 +1,6 @@
 import { fetchPublicUrl, publicHttpsUrl } from "../security.js";
+import { reconcileContentLanguage } from "../language.js";
+import type { Candidate } from "../types.js";
 
 const SCOPES = "read:statuses read:accounts write:statuses";
 
@@ -51,20 +53,20 @@ export async function fetchMastodonHome(session, { limit = 40, network = {} } = 
   return statuses.map(status => ({ ...normalizeStatus(status), feedLayer: "personal" })).filter(item => item.text);
 }
 
-export async function fetchMastodonHashtags(tags, { instance = "https://mastodon.social", accessToken = null, limitPerTag = 15, network = {} } = {}) {
+export async function fetchMastodonHashtags(tags: unknown[] = [], { instance = "https://mastodon.social", accessToken = null, limitPerTag = 15, network = {} } = {}) {
   const origin = mastodonOrigin(instance);
   const cleanTags = [...new Set((tags || []).map(tag => String(tag).replace(/^#/, "").trim()).filter(tag => /^[\p{L}\p{N}_-]+$/u.test(tag)))].slice(0, 3);
   const responses = await Promise.allSettled(cleanTags.map(async tag => {
-    const headers = { accept: "application/json" };
+    const headers: Record<string, string> = { accept: "application/json" };
     if (accessToken) headers.authorization = `Bearer ${accessToken}`;
     const response = await fetchPublicUrl(`${origin}/api/v1/timelines/tag/${encodeURIComponent(tag)}?limit=${Math.min(limitPerTag, 40)}`, { headers }, network);
     const data = await response.json().catch(() => ({}));
     if (!response.ok) throw providerError(response.status, data.error || "Mastodon-hashtag-feedin haku epäonnistui.");
     return data.map(status => ({ ...normalizeStatus(status), feedLayer: "discovery", socialContext: `Mastodon-haku · #${tag}` }));
   }));
-  const unique = new Map();
+  const unique = new Map<string, Candidate>();
   for (const item of responses.flatMap(result => result.status === "fulfilled" ? result.value : [])) if (item.text && !unique.has(item.id)) unique.set(item.id, item);
-  return [...unique.values()].sort((a, b) => new Date(b.publishedAt) - new Date(a.publishedAt));
+  return [...unique.values()].sort((a, b) => new Date(b.publishedAt).getTime() - new Date(a.publishedAt).getTime());
 }
 
 export async function publishMastodonStatus(session, { text, visibility = "public", network = {} }) {
@@ -95,7 +97,7 @@ function normalizeStatus(status) {
       avatar: account.avatar_static || account.avatar || null
     },
     text: text.slice(0, 6000),
-    language: post.language || null,
+    language: reconcileContentLanguage(text, post.language || null),
     publishedAt: post.created_at,
     indexedAt: new Date().toISOString(),
     engagement: { likes: post.favourites_count || 0, replies: post.replies_count || 0, reposts: post.reblogs_count || 0 },
@@ -121,7 +123,7 @@ async function requestJson(url, accessToken, network = {}) {
 }
 
 async function postForm(url, values, network = {}, accessToken = null) {
-  const headers = { "content-type": "application/x-www-form-urlencoded", accept: "application/json" };
+  const headers: Record<string, string> = { "content-type": "application/x-www-form-urlencoded", accept: "application/json" };
   if (accessToken) headers.authorization = `Bearer ${accessToken}`;
   const response = await fetchPublicUrl(url, {
     method: "POST",
@@ -148,4 +150,4 @@ function decodeEntities(value) {
   return value.replace(/&nbsp;/g, " ").replace(/&amp;/g, "&").replace(/&lt;/g, "<").replace(/&gt;/g, ">").replace(/&quot;/g, '"').replace(/&#39;|&apos;/g, "'");
 }
 
-function providerError(status, message) { const error = new Error(message); error.status = status; return error; }
+function providerError(status: number, message: string): Error & { status: number } { return Object.assign(new Error(message), { status }); }

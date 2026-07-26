@@ -17,11 +17,16 @@ import { fetchLocationewsStories, resolveLocationewsContext, shouldResolveLocati
 import { fetchConnectorCandidates, loadConnectorDirectory } from "./src/providers/registry.js";
 import { compileIntent, evaluateCandidates, filterCandidatesByLanguage, listLocalModels, probeModelConnection } from "./src/curator/openai.js";
 import { filterCandidatesByOriginScope, filterCandidatesByRequiredSources, filterCandidatesBySelectionMode, rankEvaluatedCandidates, selectCandidatePool, summarizeRankingQuality, triageCandidates } from "./src/curator/ranker.js";
+import type { Candidate, EvaluationSignal, RankingProgram } from "./src/types.js";
 
-const root = fileURLToPath(new URL(".", import.meta.url));
-const localEnvPath = process.env.OUTENTION_CONFIG_PATH || join(root, ".env.local");
+type ModelCredential = { provider: string; apiKey: string; model: string; baseUrl?: string; verified?: boolean; verifiedAt?: string };
+type FeedRun = { id?: string; candidates: Candidate[]; evaluated: EvaluationSignal[]; program: RankingProgram; pipeline?: Record<string, unknown> };
+
+const projectRoot = process.env.OUTENTION_PACKAGE_ROOT || process.cwd();
+const root = join(projectRoot, "dist", "web");
+const localEnvPath = process.env.OUTENTION_CONFIG_PATH || join(projectRoot, ".env.local");
 loadLocalEnv(localEnvPath);
-if (process.env.OUTENTION_IGNORE_PROJECT_ENV !== "1") loadLocalEnv(join(root, ".env"));
+if (process.env.OUTENTION_IGNORE_PROJECT_ENV !== "1") loadLocalEnv(join(projectRoot, ".env"));
 const port = Number(process.env.PORT || 4173);
 const host = process.env.HOST || "127.0.0.1";
 const basePath = normalizeBasePath(process.env.BASE_PATH || "");
@@ -74,7 +79,7 @@ const server = createServer(async (request, response) => {
     if (request.method === "POST" && url.pathname === "/api/access") return await handleAccess(request, response, session, sessionId);
     if (betaAccessCode && !session.betaAccess) {
       if (request.method === "GET" && url.pathname === "/access") return serveStatic(response, "/access.html");
-      if (request.method === "GET" && ["/styles.css", "/favicon.svg", "/src/access.js", "/src/i18n.js"].includes(url.pathname)) return serveStatic(response, url.pathname);
+      if (request.method === "GET" && (url.pathname.startsWith("/assets/") || ["/favicon.svg", "/icon-192.png", "/icon-512.png", "/apple-touch-icon.png", "/manifest.webmanifest", "/sw.js"].includes(url.pathname))) return serveStatic(response, url.pathname);
       if (url.pathname.startsWith("/api/")) return sendJson(response, 401, { error: localizeMessage("Beta-kutsu vaaditaan.", requestLocale(request)), accessRequired: true });
       response.writeHead(302, { location: withBasePath("/access"), "cache-control": "no-store" });
       return response.end();
@@ -169,7 +174,7 @@ async function handleApi(request, response, url, session, sessionId) {
     const baseUrl = provider === "local" ? validateLocalModelUrl(body.baseUrl) : null;
     if (provider === "local" && !personalMode) throw httpError(400, "Paikallinen malli on käytettävissä vain Personal Modessa.");
     if (body.persist && !personalMode && !authStore?.connectionsEnabled) throw httpError(503, "Salattu avaintallennus ei ole käytössä.");
-    const candidateCredential = { provider, apiKey, model, ...(baseUrl ? { baseUrl } : {}) };
+    const candidateCredential: ModelCredential = { provider, apiKey, model, ...(baseUrl ? { baseUrl } : {}) };
     if (process.env.OUTENTION_SKIP_MODEL_PROBE !== "1") await probeModelConnection(candidateCredential);
     session.modelCredential = { ...candidateCredential, verified: true, verifiedAt: new Date().toISOString() };
     session.modelCredentialPersisted = Boolean(body.persist);
@@ -527,7 +532,7 @@ async function handleApi(request, response, url, session, sessionId) {
     if (compiled.clarificationNeeded) return sendJson(response, 200, compiled);
     const program = mergeProgramControls(compiled.program, body.controls || {});
 
-    const batches = [];
+    const batches: Candidate[][] = [];
     if (session.bluesky) {
       try { batches.push(await fetchBlueskyTimeline(session.bluesky, { limit: 60 })); }
       catch (error) {
@@ -551,7 +556,7 @@ async function handleApi(request, response, url, session, sessionId) {
         } else console.error("Reddit Home", error.message || "tuntematon virhe");
       }
     }
-    const connectedRequests = [];
+    const connectedRequests: Array<Promise<Candidate[]>> = [];
     for (const feed of session.rss || []) connectedRequests.push(fetchRssFeed(feed, { limit: 25 }));
     if (session.yle) connectedRequests.push(fetchRssFeed({ url: YLE_NEWS_FEED, name: "Yle Uutiset" }, { limit: 25 }));
     if (session.hackernews !== false) connectedRequests.push(fetchHackerNews({ kind: "best", limit: 25 }));
@@ -569,7 +574,7 @@ async function handleApi(request, response, url, session, sessionId) {
       if (result.status === "fulfilled") batches.push(result.value);
       else console.error("Yhdistetty lähde", result.reason?.message || "tuntematon virhe");
     }
-    const discoveryRequests = [searchBlueskyPosts(program.discovery.bluesky_queries, { limitPerQuery: 15 })];
+    const discoveryRequests: Array<Promise<Candidate[]>> = [searchBlueskyPosts(program.discovery.bluesky_queries, { limitPerQuery: 15 })];
     if (session.threads) discoveryRequests.push(searchThreadsPosts(
       session.threads,
       program.discovery.bluesky_queries?.length ? program.discovery.bluesky_queries : program.discovery.reddit_queries,
@@ -643,12 +648,15 @@ async function handleApi(request, response, url, session, sessionId) {
   throw httpError(404, "Rajapintaa ei löytynyt.");
 }
 
-function sendRankedFeed(response, run, { offset = 0, limit = 20 } = {}) {
+function sendRankedFeed(response, run: FeedRun, { offset = 0, limit = 20 } = {}) {
   const rankedWithLookahead = rankEvaluatedCandidates({ ...run, offset, limit: limit + 1 });
   const hasMore = rankedWithLookahead.length > limit;
   const ranked = rankedWithLookahead.slice(0, limit);
-  const byId = new Map(run.candidates.map(item => [item.id, item]));
-  const items = ranked.map(result => ({ ...byId.get(result.id), reasons: result.reasons, score: result.score, components: result.components }));
+  const byId = new Map<string, Candidate>(run.candidates.map(item => [item.id, item]));
+  const items = ranked.flatMap(result => {
+    const candidate = byId.get(result.id);
+    return candidate ? [{ ...candidate, reasons: result.reasons, score: result.score, components: result.components }] : [];
+  });
   return sendJson(response, 200, {
     clarificationNeeded: false, clarificationQuestion: null, runId: run.id, program: run.program, items,
     pagination: { offset, nextOffset: offset + items.length, hasMore },
@@ -656,13 +664,13 @@ function sendRankedFeed(response, run, { offset = 0, limit = 20 } = {}) {
   });
 }
 
-function storeRun(session, run) {
+function storeRun(session, run: FeedRun): FeedRun & { id: string } {
   run.id = randomBytes(9).toString("base64url");
   session.runs ||= new Map();
   session.runs.set(run.id, run);
   while (session.runs.size > 12) session.runs.delete(session.runs.keys().next().value);
   session.lastRun = run;
-  return run;
+  return run as FeedRun & { id: string };
 }
 
 function mergeProgramControls(program, controls) {
@@ -677,13 +685,13 @@ function mergeProgramControls(program, controls) {
   };
 }
 
-function uniqueCandidates(candidates) {
-  return [...new Map(candidates.map(item => [item.id, item])).values()];
+function uniqueCandidates(candidates: Candidate[]): Candidate[] {
+  return [...new Map<string, Candidate>(candidates.map(item => [item.id, item])).values()];
 }
 
-function interleaveBatches(batches, limit) {
-  const sorted = batches.filter(batch => batch.length).map(batch => [...batch].sort((a, b) => new Date(b.publishedAt) - new Date(a.publishedAt)));
-  const result = [];
+function interleaveBatches(batches: Candidate[][], limit: number): Candidate[] {
+  const sorted = batches.filter(batch => batch.length).map(batch => [...batch].sort((a, b) => new Date(b.publishedAt).getTime() - new Date(a.publishedAt).getTime()));
+  const result: Candidate[] = [];
   for (let index = 0; result.length < limit && sorted.some(batch => index < batch.length); index++) {
     for (const batch of sorted) {
       if (batch[index]) result.push(batch[index]);
@@ -760,7 +768,7 @@ async function evaluateWithCache({ session, modelOptions, program, candidates, l
   };
 }
 
-function evaluationCacheKey(programFingerprint, candidate) {
+function evaluationCacheKey(programFingerprint, candidate: Candidate) {
   return `${programFingerprint}:${hashValue({
     id: candidate.id,
     text: candidate.text,
@@ -774,8 +782,8 @@ function hashValue(value) {
   return createHash("sha256").update(JSON.stringify(value)).digest("base64url").slice(0, 24);
 }
 
-function summarizeEvaluationBySource(candidates, evaluated) {
-  const byId = new Map(candidates.map(item => [item.id, item]));
+function summarizeEvaluationBySource(candidates: Candidate[], evaluated: EvaluationSignal[]) {
+  const byId = new Map<string, Candidate>(candidates.map(item => [item.id, item]));
   const summary = {};
   for (const signal of evaluated) {
     const source = byId.get(signal.id)?.sourceType || "unknown";
@@ -856,10 +864,11 @@ async function hydrateAccountSession(session, accountId) {
   session.accountId = accountId;
   if (!authStore?.connectionsEnabled) return;
   const connections = await authStore.loadConnections(accountId);
-  const saved = connections.sources || {};
+  const saved = (connections.sources && typeof connections.sources === "object" ? connections.sources : {}) as Record<string, unknown>;
   for (const key of connectorStateKeys) if (saved[key] !== undefined) session[key] = saved[key];
-  const savedCredential = connections.model_byok || (connections.model_openai?.apiKey
-    ? { provider: "openai", apiKey: connections.model_openai.apiKey, model: process.env.OPENAI_MODEL || "gpt-5.6-luna" }
+  const legacyCredential = (connections.model_openai && typeof connections.model_openai === "object" ? connections.model_openai : null) as { apiKey?: string } | null;
+  const savedCredential = (connections.model_byok && typeof connections.model_byok === "object" ? connections.model_byok : null) as ModelCredential | null || (legacyCredential?.apiKey
+    ? { provider: "openai", apiKey: legacyCredential.apiKey, model: process.env.OPENAI_MODEL || "gpt-5.6-luna" }
     : null);
   if (savedCredential?.apiKey && modelProviders.has(savedCredential.provider) && isValidModelName(savedCredential.model)) {
     session.modelCredential = savedCredential;
@@ -997,10 +1006,8 @@ function sendJson(response, status, data) {
   response.end(JSON.stringify(data));
 }
 
-function httpError(status, message) {
-  const error = new Error(message);
-  error.status = status;
-  return error;
+function httpError(status: number, message: string): Error & { status: number } {
+  return Object.assign(new Error(message), { status });
 }
 
 function requestLocale(request) {

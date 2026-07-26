@@ -3,7 +3,11 @@ import { chmod, mkdir, readFile, rename, writeFile } from "node:fs/promises";
 import { dirname } from "node:path";
 
 export class PersonalConnectionStore {
-  constructor({ path, encryptionKey = "", persistEncryptionKey }) {
+  path: string;
+  key: Buffer | null;
+  persistEncryptionKey?: (key: string) => Promise<void>;
+
+  constructor({ path, encryptionKey = "", persistEncryptionKey }: { path: string; encryptionKey?: string; persistEncryptionKey?: (key: string) => Promise<void> }) {
     if (!path) throw new Error("A local connection-store path is required.");
     this.path = path;
     this.key = encryptionKey ? parseKey(encryptionKey) : null;
@@ -12,19 +16,19 @@ export class PersonalConnectionStore {
 
   get configured() { return Boolean(this.key); }
 
-  async load() {
+  async load(): Promise<Record<string, unknown>> {
     if (!this.key) return {};
     try {
       const envelope = JSON.parse(await readFile(this.path, "utf8"));
       if (envelope.version !== 1) throw new Error("Unsupported local connection-store version.");
       return decryptJson(envelope, this.key);
     } catch (error) {
-      if (error.code === "ENOENT") return {};
-      throw new Error(`Could not open the encrypted local connection store: ${error.message}`);
+      if (isNodeError(error) && error.code === "ENOENT") return {};
+      throw new Error(`Could not open the encrypted local connection store: ${error instanceof Error ? error.message : String(error)}`);
     }
   }
 
-  async save(value) {
+  async save(value: Record<string, unknown>): Promise<void> {
     if (!this.key) {
       this.key = randomBytes(32);
       if (typeof this.persistEncryptionKey !== "function") throw new Error("No way to persist the local connection-store key.");
@@ -38,14 +42,14 @@ export class PersonalConnectionStore {
   }
 }
 
-function parseKey(value) {
+function parseKey(value: string): Buffer {
   const input = String(value || "");
   const key = /^[a-f0-9]{64}$/i.test(input) ? Buffer.from(input, "hex") : Buffer.from(input, "base64url");
   if (key.length !== 32) throw new Error("LOCAL_DATA_KEY must contain exactly 32 bytes.");
   return key;
 }
 
-function encryptJson(value, key) {
+function encryptJson(value: Record<string, unknown>, key: Buffer) {
   const iv = randomBytes(12);
   const cipher = createCipheriv("aes-256-gcm", key, iv);
   const ciphertext = Buffer.concat([cipher.update(JSON.stringify(value), "utf8"), cipher.final()]);
@@ -58,7 +62,7 @@ function encryptJson(value, key) {
   };
 }
 
-function decryptJson(value, key) {
+function decryptJson(value: { algorithm: string; iv: string; authTag: string; ciphertext: string }, key: Buffer): Record<string, unknown> {
   if (value.algorithm !== "aes-256-gcm") throw new Error("Unsupported local connection-store algorithm.");
   const decipher = createDecipheriv("aes-256-gcm", key, Buffer.from(value.iv, "base64url"));
   decipher.setAuthTag(Buffer.from(value.authTag, "base64url"));
@@ -66,4 +70,8 @@ function decryptJson(value, key) {
     decipher.update(Buffer.from(value.ciphertext, "base64url")),
     decipher.final()
   ]).toString("utf8"));
+}
+
+function isNodeError(error: unknown): error is NodeJS.ErrnoException {
+  return error instanceof Error;
 }

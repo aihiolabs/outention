@@ -51,7 +51,7 @@ export function matchMunicipality(context, municipalities) {
   return best?.score >= 90 ? { kuntakoodi: best.kuntakoodi, name: best.name } : null;
 }
 
-export async function fetchLocationewsStories({ baseUrl = DEFAULT_BASE, limit = 15, kunta, topic } = {}) {
+export async function fetchLocationewsStories({ baseUrl = DEFAULT_BASE, limit = 15, kunta, topic }: { baseUrl?: string; limit?: number; kunta?: string; topic?: string } = {}): Promise<Candidate[]> {
   const base = cleanOrigin(baseUrl);
   const params = new URLSearchParams({ limit: String(Math.min(limit, 50)) });
   if (kunta) params.set("kunta", kunta);
@@ -131,8 +131,7 @@ function normalizePlace(value) {
   return String(value || "").normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase().replace(/[^a-z0-9]+/g, " ").trim();
 }
 
-function providerError(status, message) {
-  const error = new Error(message);
-  error.status = status;
-  return error;
+function providerError(status: number, message: string): Error & { status: number } {
+  return Object.assign(new Error(message), { status });
 }
+import type { Candidate } from "../types.js";

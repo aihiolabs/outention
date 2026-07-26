@@ -1,0 +1,22 @@
+{
+  "extends": "./tsconfig.json",
+  "compilerOptions": {
+    "noEmit": false,
+    "noEmitOnError": true,
+    "outDir": "dist",
+    "rootDir": ".",
+    "declaration": true,
+    "declarationMap": true,
+    "sourceMap": true
+  },
+  "include": [
+    "server.ts",
+    "src/auth.ts",
+    "src/language.ts",
+    "src/personal-store.ts",
+    "src/security.ts",
+    "src/curator/**/*.ts",
+    "src/providers/**/*.ts"
+  ],
+  "exclude": ["src/app.ts", "src/access.ts", "src/i18n.ts"]
+}

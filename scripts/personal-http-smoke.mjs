@@ -8,10 +8,11 @@ const origin = `http://127.0.0.1:${port}`;
 const temporaryDirectory = await mkdtemp(join(tmpdir(), "outention-personal-smoke-"));
 const localConfigPath = join(temporaryDirectory, ".env.local");
 const localConnectionsPath = join(temporaryDirectory, "connections.enc.json");
-const child = spawn(process.execPath, ["server.mjs"], {
+const child = spawn(process.execPath, ["dist/server.js"], {
   cwd: new URL("..", import.meta.url),
   env: {
     ...process.env,
+    OUTENTION_PACKAGE_ROOT: process.cwd(),
     OUTENTION_MODE: "personal",
     NODE_ENV: "development",
     HOST: "127.0.0.1",

@@ -1,21 +1,28 @@
 import { timingSafeEqual } from "node:crypto";
 import { lookup } from "node:dns/promises";
 import { isIP } from "node:net";
+import type { IncomingMessage } from "node:http";
 
-export function safeEqualSecret(candidate, expected) {
+export type StatusError = Error & { status: number };
+
+export function safeEqualSecret(candidate: unknown, expected: unknown): boolean {
   const left = Buffer.from(String(candidate || ""));
   const right = Buffer.from(String(expected || ""));
   return left.length === right.length && timingSafeEqual(left, right);
 }
 
 export class SlidingWindowLimiter {
-  constructor({ limit, windowMs }) {
+  limit: number;
+  windowMs: number;
+  entries: Map<string, number[]>;
+
+  constructor({ limit, windowMs }: { limit: number; windowMs: number }) {
     this.limit = limit;
     this.windowMs = windowMs;
     this.entries = new Map();
   }
 
-  consume(key, now = Date.now()) {
+  consume(key: string, now = Date.now()) {
     const cutoff = now - this.windowMs;
     const recent = (this.entries.get(key) || []).filter(timestamp => timestamp > cutoff);
     if (recent.length >= this.limit) {
@@ -27,7 +34,7 @@ export class SlidingWindowLimiter {
     return { allowed: true, remaining: this.limit - recent.length, resetAt: recent[0] + this.windowMs };
   }
 
-  sweep(now = Date.now()) {
+  sweep(now = Date.now()): void {
     const cutoff = now - this.windowMs;
     for (const [key, timestamps] of this.entries) {
       const recent = timestamps.filter(timestamp => timestamp > cutoff);
@@ -37,7 +44,7 @@ export class SlidingWindowLimiter {
   }
 }
 
-export function publicHttpsUrl(value) {
+export function publicHttpsUrl(value: string): URL {
   let url;
   try { url = new URL(value); }
   catch { throw securityError(400, "Anna kelvollinen julkinen HTTPS-osoite."); }
@@ -48,7 +55,7 @@ export function publicHttpsUrl(value) {
   return url;
 }
 
-export async function assertPublicHostname(hostname, resolveHost = defaultResolveHost) {
+export async function assertPublicHostname(hostname: string, resolveHost: typeof defaultResolveHost = defaultResolveHost): Promise<void> {
   if (isObviouslyPrivateHostname(hostname)) throw securityError(400, "Paikallisiin tai yksityisiin verkko-osoitteisiin ei voi yhdistää.");
   let addresses;
   try { addresses = await resolveHost(hostname); }
@@ -58,7 +65,11 @@ export async function assertPublicHostname(hostname, resolveHost = defaultResolv
   }
 }
 
-export async function fetchPublicUrl(value, options = {}, { resolveHost = defaultResolveHost, fetchImpl = globalThis.fetch, maxRedirects = 3 } = {}) {
+export async function fetchPublicUrl(
+  value: string,
+  options: RequestInit = {},
+  { resolveHost = defaultResolveHost, fetchImpl = globalThis.fetch, maxRedirects = 3 }: { resolveHost?: typeof defaultResolveHost; fetchImpl?: typeof fetch; maxRedirects?: number } = {}
+): Promise<Response> {
   let url = publicHttpsUrl(value);
   for (let redirect = 0; redirect <= maxRedirects; redirect++) {
     await assertPublicHostname(url.hostname, resolveHost);
@@ -72,7 +83,7 @@ export async function fetchPublicUrl(value, options = {}, { resolveHost = defaul
   throw securityError(502, "Lähteen haku epäonnistui.");
 }
 
-export function requestIp(request, trustProxy = false) {
+export function requestIp(request: IncomingMessage, trustProxy = false): string {
   if (trustProxy) {
     const forwarded = String(request.headers["x-forwarded-for"] || "").split(",")[0].trim();
     if (forwarded) return forwarded;
@@ -80,19 +91,19 @@ export function requestIp(request, trustProxy = false) {
   return request.socket?.remoteAddress || "unknown";
 }
 
-export function mutationAllowed(request, expectedOrigin) {
+export function mutationAllowed(request: IncomingMessage, expectedOrigin?: string): boolean {
   if (request.headers["x-outention-request"] !== "1" && request.headers["x-kuule-request"] !== "1") return false;
   const origin = request.headers.origin;
   if (!expectedOrigin) return true;
   return Boolean(origin && origin === expectedOrigin);
 }
 
-function isObviouslyPrivateHostname(hostname) {
+function isObviouslyPrivateHostname(hostname: string): boolean {
   const host = hostname.toLowerCase().replace(/^\[|\]$/g, "");
   return host === "localhost" || host.endsWith(".localhost") || host.endsWith(".local") || host.endsWith(".internal") || isIP(host) > 0 && !isPublicAddress(host);
 }
 
-function isPublicAddress(address) {
+function isPublicAddress(address: string): boolean {
   const value = String(address || "").toLowerCase().split("%")[0];
   if (isIP(value) === 4) {
     const [a, b, c] = value.split(".").map(Number);
@@ -106,8 +117,10 @@ function isPublicAddress(address) {
   return false;
 }
 
-async function defaultResolveHost(hostname) {
+async function defaultResolveHost(hostname: string) {
   return lookup(hostname, { all: true, verbatim: true });
 }
 
-function securityError(status, message) { const error = new Error(message); error.status = status; return error; }
+function securityError(status: number, message: string): StatusError {
+  return Object.assign(new Error(message), { status });
+}

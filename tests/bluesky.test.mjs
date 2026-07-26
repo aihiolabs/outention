@@ -51,6 +51,30 @@ test("normalizes the authenticated home timeline to original content items", asy
   assert.equal(items[0].feedLayer, "personal");
 });
 
+test("corrects a clearly Finnish post whose declared language is English", async t => {
+  const originalFetch = globalThis.fetch;
+  t.after(() => { globalThis.fetch = originalFetch; });
+  globalThis.fetch = async () => Response.json({ feed: [{ post: {
+    uri: "at://did:plc:author/app.bsky.feed.post/fi", indexedAt: "2026-07-26T10:00:00Z",
+    author: { did: "did:plc:author", handle: "author.test" },
+    record: { text: "Itse sain tuon maailman loppuun eilen.", createdAt: "2026-07-26T10:00:00Z", langs: ["en"] }
+  }}] });
+  const [item] = await fetchBlueskyTimeline({ pds: "https://bsky.social", accessJwt: "access" });
+  assert.equal(item.language, "fi");
+});
+
+test("keeps a genuinely English post declared as English", async t => {
+  const originalFetch = globalThis.fetch;
+  t.after(() => { globalThis.fetch = originalFetch; });
+  globalThis.fetch = async () => Response.json({ feed: [{ post: {
+    uri: "at://did:plc:author/app.bsky.feed.post/en", indexedAt: "2026-07-26T10:00:00Z",
+    author: { did: "did:plc:author", handle: "author.test" },
+    record: { text: "When I was walking, I saw a newt on the road.", createdAt: "2026-07-26T10:00:00Z", langs: ["en"] }
+  }}] });
+  const [item] = await fetchBlueskyTimeline({ pds: "https://bsky.social", accessJwt: "access" });
+  assert.equal(item.language, "en");
+});
+
 test("recognizes Bluesky's HTTP 400 ExpiredToken response for automatic refresh", async t => {
   const originalFetch = globalThis.fetch;
   t.after(() => { globalThis.fetch = originalFetch; });

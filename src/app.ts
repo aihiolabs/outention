@@ -1,4 +1,6 @@
-import { applyLocale, bindLocaleToggle, locale, t } from "./i18n.js?v=0.1.3";
+// Transitional DOM controller: React components replace this module section by section.
+// @ts-nocheck -- removed as each behavior moves into a typed React component.
+import { applyLocale, bindLocaleToggle, locale, t } from "./i18n.js";
 
 applyLocale();
 bindLocaleToggle();
